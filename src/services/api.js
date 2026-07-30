@@ -230,12 +230,12 @@ export const api = {
       });
       if (res.ok) {
         return await res.json();
-      } else {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to complete reservation.');
       }
+
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to complete reservation.');
     } catch (err) {
-      if (err.message && !err.message.includes('fetch')) {
+      if (err.message && !err.message.includes('fetch') && !err.message.includes('JSON')) {
         throw err;
       }
       // Fallback if backend server is completely offline
