@@ -8,7 +8,12 @@ import HomePage from './pages/HomePage';
 import ReservePage from './pages/ReservePage';
 import SuccessPage from './pages/SuccessPage';
 import { AuthProvider } from './context/AuthContext';
-import AdminRoutes from './AdminRoutes';
+import ProtectedRoute from './components/ProtectedRoute';
+import AdminLogin from './pages/admin/AdminLogin';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import OrientationsList from './pages/admin/OrientationsList';
+import ReservationsList from './pages/admin/ReservationsList';
 
 const enableAdmin = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN === 'true';
 
@@ -42,7 +47,22 @@ function MainLayout() {
           <Route path="/reserve" element={<ReservePage />} />
           <Route path="/success" element={<SuccessPage />} />
           {enableAdmin ? (
-            <AdminRoutes />
+            <>
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute>
+                    <AdminLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="/admin/dashboard" replace />} />
+                <Route path="dashboard" element={<AdminDashboard />} />
+                <Route path="orientations" element={<OrientationsList />} />
+                <Route path="reservations" element={<ReservationsList />} />
+              </Route>
+            </>
           ) : (
             <Route path="/admin/*" element={<Navigate to="/" replace />} />
           )}
