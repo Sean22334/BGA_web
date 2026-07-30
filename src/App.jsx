@@ -7,15 +7,10 @@ import BackToTop from './components/BackToTop';
 import HomePage from './pages/HomePage';
 import ReservePage from './pages/ReservePage';
 import SuccessPage from './pages/SuccessPage';
-
-// Admin System Imports
 import { AuthProvider } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import AdminLogin from './pages/admin/AdminLogin';
-import AdminLayout from './pages/admin/AdminLayout';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import OrientationsList from './pages/admin/OrientationsList';
-import ReservationsList from './pages/admin/ReservationsList';
+import AdminRoutes from './AdminRoutes';
+
+const enableAdmin = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN === 'true';
 
 function ScrollToTopOnRoute() {
   const { pathname, hash } = useLocation();
@@ -36,35 +31,21 @@ function ScrollToTopOnRoute() {
 
 function MainLayout() {
   const location = useLocation();
-  const isAdminRoute = location.pathname.startsWith('/admin');
+  const isAdminRoute = enableAdmin && location.pathname.startsWith('/admin');
 
   return (
     <div className="min-h-screen flex flex-col bg-[#050D1A] text-slate-100 font-sans">
       {!isAdminRoute && <Navbar />}
       <div className="flex-grow">
         <Routes>
-          {/* Public Routes */}
           <Route path="/" element={<HomePage />} />
           <Route path="/reserve" element={<ReservePage />} />
           <Route path="/success" element={<SuccessPage />} />
-
-          {/* Admin Authentication */}
-          <Route path="/admin/login" element={<AdminLogin />} />
-
-          {/* Protected Admin Portal */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute>
-                <AdminLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="orientations" element={<OrientationsList />} />
-            <Route path="reservations" element={<ReservationsList />} />
-          </Route>
+          {enableAdmin ? (
+            <AdminRoutes />
+          ) : (
+            <Route path="/admin/*" element={<Navigate to="/" replace />} />
+          )}
         </Routes>
       </div>
       {!isAdminRoute && <Footer />}
@@ -74,13 +55,23 @@ function MainLayout() {
   );
 }
 
-export default function App() {
+function AppShell() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <ScrollToTopOnRoute />
-        <MainLayout />
-      </BrowserRouter>
-    </AuthProvider>
+    <BrowserRouter>
+      <ScrollToTopOnRoute />
+      <MainLayout />
+    </BrowserRouter>
   );
+}
+
+export default function App() {
+  if (enableAdmin) {
+    return (
+      <AuthProvider>
+        <AppShell />
+      </AuthProvider>
+    );
+  }
+
+  return <AppShell />;
 }
