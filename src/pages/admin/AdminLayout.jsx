@@ -9,9 +9,8 @@ import {
   X,
   ExternalLink,
   ShieldCheck,
-  Building,
-  Bell,
-  Sparkles
+  Sparkles,
+  Globe
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -27,6 +26,7 @@ export default function AdminLayout() {
 
   const navItems = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+    { name: 'Website Content (CMS)', path: '/admin/cms', icon: Globe },
     { name: 'Orientation Events', path: '/admin/orientations', icon: Calendar },
     { name: 'Reservation Requests', path: '/admin/reservations', icon: Users }
   ];

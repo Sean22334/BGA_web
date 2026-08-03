@@ -83,3 +83,110 @@ VALUES
 (1, 'BGA-2026-8492', 'Alex Rivera', '09170000001', 'alex.rivera@example.com', '123 Sample Street', 'Tagum City', 'Davao del Norte', 'Interested in Culinary Arts course', 'Confirmed'),
 (1, 'BGA-2026-7310', 'Jane Doe', '09170000002', 'jane.doe@example.com', '456 Demo Avenue', 'Panabo City', 'Davao del Norte', 'Wants morning session evaluation', 'Pending'),
 (2, 'BGA-2026-4198', 'John Smith', '09170000003', 'john.smith@example.com', '789 Test Boulevard', 'Butuan City', 'Agusan del Norte', 'Prior F&B experience in local resort', 'Confirmed');
+
+-- =============================================================================
+-- CMS Tables DDL
+-- =============================================================================
+
+-- 4. Site Settings (Key-Value configuration for hero, about, contact, social, footer)
+CREATE TABLE IF NOT EXISTS site_settings (
+    setting_key VARCHAR(100) PRIMARY KEY,
+    setting_value LONGTEXT NOT NULL,
+    group_name VARCHAR(50) NOT NULL DEFAULT 'general',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_group (group_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 5. CMS Programs Table
+CREATE TABLE IF NOT EXISTS cms_programs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    program_id VARCHAR(50) NOT NULL UNIQUE,
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    badge VARCHAR(100) NOT NULL,
+    short_description TEXT NOT NULL,
+    duration VARCHAR(100) NOT NULL,
+    eligibility VARCHAR(255) NOT NULL,
+    image VARCHAR(500) NOT NULL,
+    overview TEXT NOT NULL,
+    highlights JSON NOT NULL,
+    display_order INT DEFAULT 0,
+    is_published TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 6. CMS Branches Table
+CREATE TABLE IF NOT EXISTS cms_branches (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_key VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    address TEXT NOT NULL,
+    phone VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    hours VARCHAR(255) NOT NULL,
+    map_url TEXT NOT NULL,
+    image VARCHAR(500) NOT NULL,
+    features JSON NOT NULL,
+    display_order INT DEFAULT 0,
+    is_published TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 7. CMS Gallery Table
+CREATE TABLE IF NOT EXISTS cms_gallery (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    image VARCHAR(500) NOT NULL,
+    display_order INT DEFAULT 0,
+    is_published TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 8. CMS Testimonials Table
+CREATE TABLE IF NOT EXISTS cms_testimonials (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    role VARCHAR(150) NOT NULL,
+    company VARCHAR(150) NOT NULL,
+    quote TEXT NOT NULL,
+    avatar VARCHAR(500) NOT NULL,
+    branch_tag VARCHAR(150) NOT NULL,
+    display_order INT DEFAULT 0,
+    is_published TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 9. CMS FAQs Table
+CREATE TABLE IF NOT EXISTS cms_faqs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    faq_key VARCHAR(50) NOT NULL UNIQUE,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    category VARCHAR(100) DEFAULT 'General',
+    display_order INT DEFAULT 0,
+    is_published TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 10. CMS Statistics Table
+CREATE TABLE IF NOT EXISTS cms_stats (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    stat_key VARCHAR(50) NOT NULL UNIQUE,
+    value VARCHAR(50) NOT NULL,
+    label VARCHAR(150) NOT NULL,
+    icon VARCHAR(50) NOT NULL,
+    display_order INT DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 11. CMS Partners Table
+CREATE TABLE IF NOT EXISTS cms_partners (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL UNIQUE,
+    logo_url VARCHAR(500) DEFAULT NULL,
+    display_order INT DEFAULT 0,
+    is_published TINYINT(1) DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+

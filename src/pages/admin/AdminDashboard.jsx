@@ -126,6 +126,14 @@ export default function AdminDashboard() {
           </div>
 
           <Link
+            to="/admin/cms"
+            className="px-4 py-2.5 rounded-xl glass-panel border border-[#2670f2]/40 hover:bg-[#2670f2]/10 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+          >
+            <Sparkles className="w-4 h-4 text-[#2670f2]" />
+            <span>Manage Content (CMS)</span>
+          </Link>
+
+          <Link
             to="/admin/orientations"
             className="px-4 py-2.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-bold text-xs shadow-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
           >

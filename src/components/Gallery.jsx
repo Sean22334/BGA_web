@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, X, Maximize2, Sparkles } from 'lucide-react';
-import { GALLERY_ITEMS } from '../data/bgaData';
+import { Camera, X, Maximize2 } from 'lucide-react';
+import { useContent } from '../context/ContentContext';
 
 export default function Gallery() {
+  const { gallery } = useContent();
   const [activeCategory, setActiveCategory] = useState('All');
   const [lightboxImage, setLightboxImage] = useState(null);
 
-  const categories = ['All', 'Training', 'Kitchen Lab', 'Orientation', 'Graduation', 'Student Activities'];
+  const categories = ['All', ...new Set(gallery.map((item) => item.category))];
 
   const filteredItems = activeCategory === 'All'
-    ? GALLERY_ITEMS
-    : GALLERY_ITEMS.filter(item => item.category === activeCategory);
+    ? gallery
+    : gallery.filter(item => item.category === activeCategory);
 
   return (
     <section id="gallery" className="relative py-24 bg-[#050D1A] overflow-hidden">
@@ -54,14 +55,14 @@ export default function Gallery() {
         {/* Photo Grid */}
         <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <AnimatePresence>
-            {filteredItems.map((item) => (
+            {filteredItems.map((item, idx) => (
               <motion.div
                 layout
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ duration: 0.3 }}
-                key={item.id}
+                key={item.id || idx}
                 onClick={() => setLightboxImage(item)}
                 className="group relative h-64 rounded-2xl overflow-hidden glass-card cursor-pointer border border-white/10"
               >

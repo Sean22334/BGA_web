@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HelpCircle, ChevronDown } from 'lucide-react';
-import { FAQS } from '../data/bgaData';
+import { useContent } from '../context/ContentContext';
 
 export default function FAQ() {
-  const [openId, setOpenId] = useState('faq-1');
+  const { faqs } = useContent();
+  const [openId, setOpenId] = useState(faqs.length > 0 ? (faqs[0].id || faqs[0].faq_key || 1) : null);
 
   const toggleFaq = (id) => {
     setOpenId(openId === id ? null : id);
@@ -38,11 +39,12 @@ export default function FAQ() {
 
         {/* Accordion Layout */}
         <div className="space-y-3">
-          {FAQS.map((faq, idx) => {
-            const isOpen = openId === faq.id;
+          {faqs.map((faq, idx) => {
+            const faqId = faq.id || faq.faq_key || idx;
+            const isOpen = openId === faqId;
             return (
               <motion.div
-                key={faq.id}
+                key={faqId}
                 initial={{ opacity: 0, y: 15 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -54,7 +56,7 @@ export default function FAQ() {
                 }`}
               >
                 <button
-                  onClick={() => toggleFaq(faq.id)}
+                  onClick={() => toggleFaq(faqId)}
                   className="w-full p-6 text-left flex items-center justify-between gap-4 focus:outline-none cursor-pointer"
                   aria-expanded={isOpen}
                 >

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Anchor, ChefHat, Menu, X, ChevronRight, Sparkles, Phone, Calendar } from 'lucide-react';
+import { useContent } from '../context/ContentContext';
 
 export default function Navbar() {
+  const { settings } = useContent();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
@@ -97,9 +99,9 @@ export default function Navbar() {
           {/* Action CTAs */}
           <div className="hidden sm:flex items-center gap-3">
             <a
-              href="tel:+639171234567"
+              href={`tel:${settings.contact_hotline || '+639564839033'}`}
               className="p-2.5 rounded-xl border border-white/10 text-slate-300 hover:text-[#2670f2] hover:border-[#2670f2]/40 hover:bg-white/5 transition-all"
-              title="Call Admissions Hotline"
+              title={`Call Admissions Hotline: ${settings.contact_hotline || '+63 956 483 9033'}`}
             >
               <Phone className="w-4 h-4" />
             </a>

@@ -8,12 +8,14 @@ import HomePage from './pages/HomePage';
 import ReservePage from './pages/ReservePage';
 import SuccessPage from './pages/SuccessPage';
 import { AuthProvider } from './context/AuthContext';
+import { ContentProvider } from './context/ContentContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import OrientationsList from './pages/admin/OrientationsList';
 import ReservationsList from './pages/admin/ReservationsList';
+import ContentManager from './pages/admin/ContentManager';
 
 const enableAdmin = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN === 'true';
 
@@ -59,6 +61,7 @@ function MainLayout() {
               >
                 <Route index element={<Navigate to="/admin/dashboard" replace />} />
                 <Route path="dashboard" element={<AdminDashboard />} />
+                <Route path="cms" element={<ContentManager />} />
                 <Route path="orientations" element={<OrientationsList />} />
                 <Route path="reservations" element={<ReservationsList />} />
               </Route>
@@ -85,13 +88,15 @@ function AppShell() {
 }
 
 export default function App() {
-  if (enableAdmin) {
-    return (
-      <AuthProvider>
+  return (
+    <ContentProvider>
+      {enableAdmin ? (
+        <AuthProvider>
+          <AppShell />
+        </AuthProvider>
+      ) : (
         <AppShell />
-      </AuthProvider>
-    );
-  }
-
-  return <AppShell />;
+      )}
+    </ContentProvider>
+  );
 }

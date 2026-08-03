@@ -2,15 +2,25 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Anchor, Compass, Calendar, ArrowRight, ShieldCheck, Award, Users, MapPin } from 'lucide-react';
-import { ACADEMY_STATS } from '../data/bgaData';
+import { useContent } from '../context/ContentContext';
 
 export default function Hero() {
+  const { settings, stats } = useContent();
+
   const statIcons = {
     years: Award,
     graduates: Users,
     centers: MapPin,
-    partners: Anchor
+    partners: Anchor,
+    Award: Award,
+    Users: Users,
+    MapPin: MapPin,
+    Anchor: Anchor
   };
+
+  const trustBadges = Array.isArray(settings.hero_trust_badges)
+    ? settings.hero_trust_badges
+    : ['100% Free Career Orientation', 'Zero Prior Experience Required', 'POEA Manning Agency Endorsements'];
 
   return (
     <section id="hero" className="relative min-h-screen pt-28 pb-16 lg:pt-36 lg:pb-24 flex flex-col justify-between overflow-hidden">
@@ -18,7 +28,7 @@ export default function Hero() {
       {/* Background Image Layer with Cinematic Gradient & Radial Glows */}
       <div className="absolute inset-0 z-0">
         <img
-          src="/images/BGA LOGOOO.png"
+          src={settings.hero_bg_image || '/images/BGA LOGOOO.png'}
           alt="Luxury International Cruise Ship"
           className="w-[1900px] h-[1000px] object-cover object-center scale-105 filter brightness-75 contrast-125"
         />
@@ -42,7 +52,7 @@ export default function Hero() {
           className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#2670f2]/10 border border-[#2670f2]/30 text-[#2670f2] text-xs font-bold uppercase tracking-widest mb-6"
         >
           <ShieldCheck className="w-4 h-4 text-[#2670f2]" />
-          <span>TESDA Accredited • International Cruise Placement</span>
+          <span>{settings.hero_badge || 'TESDA Accredited • International Cruise Placement'}</span>
         </motion.div>
 
         {/* Headline */}
@@ -52,9 +62,9 @@ export default function Hero() {
           transition={{ duration: 0.8, delay: 0.2 }}
           className="text-4xl sm:text-6xl lg:text-7xl font-black text-white tracking-tight leading-[1.12] max-w-5xl mx-auto"
         >
-          Crafting World-Class Careers on{' '}
+          {settings.hero_headline || 'Crafting World-Class Careers on'}{' '}
           <span className="text-gold-gradient block sm:inline mt-2 sm:mt-0">
-            International Cruise Ships
+            {settings.hero_headline_highlight || 'International Cruise Ships'}
           </span>
         </motion.h1>
 
@@ -65,7 +75,7 @@ export default function Hero() {
           transition={{ duration: 0.8, delay: 0.4 }}
           className="mt-6 text-base sm:text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto leading-relaxed font-normal"
         >
-          TESDA-accredited culinary, hospitality, and maritime training programs designed to prepare aspiring seafarers for high-paying contracts on luxury ocean liners.
+          {settings.hero_subheadline || 'TESDA-accredited culinary, hospitality, and maritime training programs designed to prepare aspiring seafarers for high-paying contracts on luxury ocean liners.'}
         </motion.p>
 
         {/* CTAs */}
@@ -80,7 +90,7 @@ export default function Hero() {
             className="btn-primary w-full sm:w-auto text-base !py-4 !px-8 group"
           >
             <Calendar className="w-5 h-5 text-white" />
-            <span>Reserve Free Orientation</span>
+            <span>{settings.hero_primary_cta_text || 'Reserve Free Orientation'}</span>
             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
           </Link>
 
@@ -89,7 +99,7 @@ export default function Hero() {
             className="btn-secondary w-full sm:w-auto text-base !py-4 !px-8 group"
           >
             <Compass className="w-5 h-5 text-[#2670f2] group-hover:rotate-45 transition-transform duration-300" />
-            <span>Explore Programs</span>
+            <span>{settings.hero_secondary_cta_text || 'Explore Programs'}</span>
           </a>
         </motion.div>
 
@@ -100,22 +110,23 @@ export default function Hero() {
           transition={{ duration: 1, delay: 0.8 }}
           className="mt-12 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 font-medium"
         >
-          <span>✓ 100% Free Career Orientation</span>
-          <span className="hidden sm:inline text-slate-700">•</span>
-          <span>✓ Zero Prior Experience Required</span>
-          <span className="hidden sm:inline text-slate-700">•</span>
-          <span>✓ POEA Manning Agency Endorsements</span>
+          {trustBadges.map((badgeText, idx) => (
+            <React.Fragment key={idx}>
+              {idx > 0 && <span className="hidden sm:inline text-slate-700">•</span>}
+              <span>✓ {badgeText}</span>
+            </React.Fragment>
+          ))}
         </motion.div>
       </div>
 
       {/* Embedded Floating Statistics Section */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-14 sm:mt-20 w-full">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-          {ACADEMY_STATS.map((stat, idx) => {
-            const IconComponent = statIcons[stat.id] || Award;
+          {stats.map((stat, idx) => {
+            const IconComponent = statIcons[stat.stat_key] || statIcons[stat.icon] || Award;
             return (
               <motion.div
-                key={stat.id}
+                key={stat.id || stat.stat_key || idx}
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.8 + idx * 0.1 }}

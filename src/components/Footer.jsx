@@ -1,10 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, ArrowUpRight } from 'lucide-react';
-import { PROGRAMS, BRANCHES } from '../data/bgaData';
 import { FacebookIcon } from './SocialIcons';
+import { useContent } from '../context/ContentContext';
 
 export default function Footer() {
+  const { settings, programs, branches } = useContent();
+
   return (
     <footer className="bg-[#030914] text-slate-400 pt-20 pb-12 relative overflow-hidden">
 
@@ -36,12 +38,12 @@ export default function Footer() {
             </Link>
 
             <p className="text-sm leading-relaxed text-slate-500 max-w-sm">
-              The premier cruise career training academy in the Philippines. Preparing world-class seafarers, chefs, and hospitality staff for luxury international ocean liners.
+              {settings.footer_tagline || 'The premier cruise career training academy in the Philippines. Preparing world-class seafarers, chefs, and hospitality staff for luxury international ocean liners.'}
             </p>
 
             <div className="pt-1 flex items-center gap-2">
               <a
-                href="https://www.facebook.com/bluechefglobalacademy"
+                href={settings.contact_facebook || 'https://www.facebook.com/bluechefglobalacademy'}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-9 h-9 rounded-lg bg-white/[0.04] hover:bg-[#2670f2]/15 border border-white/[0.06] hover:border-[#2670f2]/30 text-slate-400 hover:text-[#2670f2] flex items-center justify-center transition-all duration-200"
@@ -79,9 +81,9 @@ export default function Footer() {
               Programs
             </h4>
             <ul className="space-y-2.5 text-sm">
-              {PROGRAMS.map(prog => (
-                <li key={prog.id}>
-                  <Link to={`/reserve?program=${prog.id}`} className="hover:text-white transition-colors duration-200 block truncate max-w-[200px]">
+              {programs.map((prog, idx) => (
+                <li key={prog.id || prog.program_id || idx}>
+                  <Link to={`/reserve?program=${prog.id || prog.program_id}`} className="hover:text-white transition-colors duration-200 block truncate max-w-[200px]">
                     {prog.title}
                   </Link>
                 </li>
@@ -95,9 +97,9 @@ export default function Footer() {
               Branches
             </h4>
             <ul className="space-y-2.5 text-sm">
-              {BRANCHES.map(b => (
-                <li key={b.id}>
-                  <Link to={`/reserve?branch=${b.id}`} className="hover:text-white transition-colors duration-200 flex items-center gap-1.5">
+              {branches.map((b, idx) => (
+                <li key={b.id || b.branch_key || idx}>
+                  <Link to={`/reserve?branch=${b.id || b.branch_key}`} className="hover:text-white transition-colors duration-200 flex items-center gap-1.5">
                     <MapPin className="w-3 h-3 text-[#2670f2]/60 shrink-0" />
                     <span>{b.name}</span>
                   </Link>
@@ -111,7 +113,7 @@ export default function Footer() {
         {/* Bottom Credits & Copyright */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-600">
           <div>
-            © {new Date().getFullYear()} Bluechef Global Academy. All rights reserved.
+            {settings.footer_copyright || `© ${new Date().getFullYear()} Bluechef Global Academy. All rights reserved.`}
           </div>
           <div className="flex items-center gap-6">
             <span className="hover:text-slate-400 transition-colors cursor-pointer">Privacy Policy</span>

@@ -1,31 +1,29 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Target, Eye, ShieldCheck, Sparkles, CheckCircle2, Building2, Anchor } from 'lucide-react';
-import { PARTNER_CRUISE_LINES } from '../data/bgaData';
+import { useContent } from '../context/ContentContext';
 
 export default function AboutUs() {
-  const whyChooseUs = [
-    {
-      title: 'TESDA-Aligned Curriculum',
-      desc: 'Programs designed strictly according to international maritime (STCW & MLC 2006) and USPH culinary standards.',
-      icon: ShieldCheck
-    },
-    {
-      title: 'State-of-the-Art Labs',
-      desc: 'Train in fully equipped commercial kitchens and mock cruise staterooms that mirror real shipboard environments.',
-      icon: Building2
-    },
-    {
-      title: 'Direct Agency Placement',
-      desc: 'Exclusive recruitment endorsements with top POEA/DMW licensed manning agencies for major luxury cruise lines.',
-      icon: Anchor
-    },
-    {
-      title: 'Veteran Industry Faculty',
-      desc: 'Learn directly from former cruise ship Executive Chefs, F&B Managers, and Chief Housekeepers.',
-      icon: Sparkles
-    }
+  const { settings, partners } = useContent();
+
+  const iconMap = {
+    ShieldCheck,
+    Building2,
+    Anchor,
+    Sparkles
+  };
+
+  const whyChooseUsRaw = Array.isArray(settings.about_why_items) ? settings.about_why_items : [
+    { title: 'TESDA-Aligned Curriculum', desc: 'Programs designed strictly according to international maritime (STCW & MLC 2006) and USPH culinary standards.', icon: 'ShieldCheck' },
+    { title: 'State-of-the-Art Labs', desc: 'Train in fully equipped commercial kitchens and mock cruise staterooms that mirror real shipboard environments.', icon: 'Building2' },
+    { title: 'Direct Agency Placement', desc: 'Exclusive recruitment endorsements with top POEA/DMW licensed manning agencies for major luxury cruise lines.', icon: 'Anchor' },
+    { title: 'Veteran Industry Faculty', desc: 'Learn directly from former cruise ship Executive Chefs, F&B Managers, and Chief Housekeepers.', icon: 'Sparkles' }
   ];
+
+  const whyChooseUs = whyChooseUsRaw.map((item, idx) => ({
+    ...item,
+    icon: typeof item.icon === 'string' ? (iconMap[item.icon] || ShieldCheck) : (item.icon || ShieldCheck)
+  }));
 
   const fadeUp = {
     initial: { opacity: 0, y: 24 },
@@ -36,7 +34,7 @@ export default function AboutUs() {
 
   return (
     <section id="about" className="relative py-28 lg:py-36 bg-[#050D1A] overflow-hidden">
-      {/* Subtle ambient glow — restrained */}
+      {/* Subtle ambient glow */}
       <div className="absolute top-1/2 left-0 w-[500px] h-[500px] bg-[#2670f2]/[0.04] rounded-full blur-[160px] pointer-events-none" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -44,14 +42,14 @@ export default function AboutUs() {
         {/* Section Header */}
         <motion.div {...fadeUp} className="text-center max-w-3xl mx-auto mb-20">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[#2670f2] text-[11px] font-bold uppercase tracking-[0.2em] mb-5">
-            About Bluechef Global Academy
+            {settings.about_badge || 'About Bluechef Global Academy'}
           </div>
           <h2 className="text-3xl sm:text-5xl lg:text-[3.5rem] font-black text-white tracking-tight leading-[1.1]">
-            Crafting World-Class Careers On{' '}
-            <span className="text-gold-gradient">The High Seas</span>
+            {settings.about_headline || 'Crafting World-Class Careers On'}{' '}
+            <span className="text-gold-gradient">{settings.about_headline_highlight || 'The High Seas'}</span>
           </h2>
           <p className="mt-5 text-slate-400 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
-            Bluechef Global Academy is the premier maritime hospitality and culinary training institute in the Philippines, transforming passionate individuals into high-earning global seafarers.
+            {settings.about_subheadline || 'Bluechef Global Academy is the premier maritime hospitality and culinary training institute in the Philippines, transforming passionate individuals into high-earning global seafarers.'}
           </p>
         </motion.div>
 
@@ -69,10 +67,10 @@ export default function AboutUs() {
               <div className="w-12 h-12 rounded-2xl bg-[#2670f2]/10 flex items-center justify-center">
                 <Target className="w-6 h-6 text-[#2670f2]" />
               </div>
-              <h3 className="text-2xl font-bold text-white tracking-tight">Our Mission</h3>
+              <h3 className="text-2xl font-bold text-white tracking-tight">{settings.about_mission_title || 'Our Mission'}</h3>
             </div>
             <p className="text-slate-400 leading-relaxed text-[15px] relative z-10">
-              To empower Filipino youth and hospitality professionals with top-tier, international-standard culinary and maritime training, unlocking lucrative global career opportunities and elevating the standard of Filipino seafarers worldwide.
+              {settings.about_mission_desc || 'To empower Filipino youth and hospitality professionals with top-tier, international-standard culinary and maritime training, unlocking lucrative global career opportunities and elevating the standard of Filipino seafarers worldwide.'}
             </p>
           </motion.div>
 
@@ -87,10 +85,10 @@ export default function AboutUs() {
               <div className="w-12 h-12 rounded-2xl bg-[#2670f2]/10 flex items-center justify-center">
                 <Eye className="w-6 h-6 text-[#2670f2]" />
               </div>
-              <h3 className="text-2xl font-bold text-white tracking-tight">Our Vision</h3>
+              <h3 className="text-2xl font-bold text-white tracking-tight">{settings.about_vision_title || 'Our Vision'}</h3>
             </div>
             <p className="text-slate-400 leading-relaxed text-[15px] relative z-10">
-              To be the most recognized and trusted cruise career training brand in Southeast Asia, preferred by global cruise liners for producing disciplined, highly skilled, and compassionate maritime professionals.
+              {settings.about_vision_desc || 'To be the most recognized and trusted cruise career training brand in Southeast Asia, preferred by global cruise liners for producing disciplined, highly skilled, and compassionate maritime professionals.'}
             </p>
           </motion.div>
         </div>
@@ -99,7 +97,7 @@ export default function AboutUs() {
         <div>
           <motion.div {...fadeUp} className="text-center mb-14">
             <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
-              Why Choose <span className="text-gold-gradient">Bluechef Global Academy</span>?
+              {settings.about_why_title || 'Why Choose Bluechef Global Academy?'}
             </h3>
           </motion.div>
 
@@ -108,7 +106,7 @@ export default function AboutUs() {
               const IconComp = pillar.icon;
               return (
                 <motion.div
-                  key={pillar.title}
+                  key={pillar.title || idx}
                   initial={{ opacity: 0, y: 24 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
@@ -135,18 +133,18 @@ export default function AboutUs() {
           </div>
         </div>
 
-        {/* Industry Partners Bar — Tier 3: No container box */}
+        {/* Industry Partners Bar */}
         <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.2 }} className="mt-24 text-center">
           <h4 className="text-[11px] uppercase tracking-[0.25em] font-bold text-slate-500 mb-8">
             Trusted Placement Destinations & Partner Cruise Fleets
           </h4>
           <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
-            {PARTNER_CRUISE_LINES.map((partner) => (
+            {partners.map((partner) => (
               <span 
-                key={partner}
+                key={typeof partner === 'string' ? partner : partner.name}
                 className="text-slate-400/80 font-bold text-sm sm:text-base tracking-wide hover:text-white transition-colors duration-300 cursor-default"
               >
-                {partner}
+                {typeof partner === 'string' ? partner : partner.name}
               </span>
             ))}
           </div>

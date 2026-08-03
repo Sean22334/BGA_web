@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Phone, Mail, MapPin, Clock, Send, CheckCircle2, MessageSquare } from 'lucide-react';
 import { FacebookIcon } from './SocialIcons';
+import { useContent } from '../context/ContentContext';
 
 export default function Contact() {
+  const { settings } = useContent();
   const [submitted, setSubmitted] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -61,8 +63,8 @@ export default function Contact() {
                 </div>
                 <div>
                   <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Phone Hotlines</div>
-                  <a href="tel:+639171234567" className="text-white font-semibold hover:text-[#2670f2] transition-colors block mt-0.5">
-                    +63 956 483 9033 (Globe)
+                  <a href={`tel:${settings.contact_hotline || '+63 956 483 9033'}`} className="text-white font-semibold hover:text-[#2670f2] transition-colors block mt-0.5">
+                    {settings.contact_hotline || '+63 956 483 9033 (Globe)'}
                   </a>
                 </div>
               </div>
@@ -73,8 +75,8 @@ export default function Contact() {
                 </div>
                 <div>
                   <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Email Inquiry</div>
-                  <a href="mailto:bluechefglobalacademy@gmail.com" className="text-white font-semibold hover:text-[#2670f2] transition-colors block mt-0.5">
-                    bluechefglobalacademy@gmail.com
+                  <a href={`mailto:${settings.contact_email || 'bluechefglobalacademy@gmail.com'}`} className="text-white font-semibold hover:text-[#2670f2] transition-colors block mt-0.5">
+                    {settings.contact_email || 'bluechefglobalacademy@gmail.com'}
                   </a>
                 </div>
               </div>
@@ -86,12 +88,12 @@ export default function Contact() {
                 <div>
                   <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Official Facebook Page</div>
                   <a
-                    href="https://www.facebook.com/bluechefglobalacademy"
+                    href={settings.contact_facebook || 'https://www.facebook.com/bluechefglobalacademy'}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[#2670f2] font-bold hover:underline block mt-0.5 text-sm"
                   >
-                    https://www.facebook.com/bluechefglobalacademy
+                    {settings.contact_facebook || 'https://www.facebook.com/bluechefglobalacademy'}
                   </a>
                 </div>
               </div>
@@ -103,7 +105,7 @@ export default function Contact() {
                 <div>
                   <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Business Hours</div>
                   <div className="text-white font-medium text-sm mt-0.5">
-                    Monday - Saturday: 8:00 AM - 5:00 PM
+                    {settings.contact_hours || 'Monday - Saturday: 8:00 AM - 5:00 PM'}
                   </div>
                   <div className="text-slate-400 text-xs">Closed on Sundays & National Holidays</div>
                 </div>
@@ -121,7 +123,7 @@ export default function Contact() {
               <div className="h-44 rounded-2xl overflow-hidden relative">
                 <iframe
                   title="Bluechef Global Academy Tagum Location Map"
-                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1144.6745001914448!2d125.80265620350177!3d7.448243878904475!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x32f9531262cc8317%3A0x16fdd36a831bf336!2sLacor%20Building%2C%20Bonifacio%20St%2C%20Tagum%2C%20Davao%20del%20Norte!5e1!3m2!1sen!2sph!4v1784871359698!5m2!1sen!2sph"
+                  src={settings.contact_map_url || 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1144.6745001914448!2d125.80265620350177!3d7.448243878904475!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x32f9531262cc8317%3A0x16fdd36a831bf336!2sLacor%20Building%2C%20Bonifacio%20St%2C%20Tagum%2C%20Davao%20del%20Norte!5e1!3m2!1sen!2sph!4v1784871359698!5m2!1sen!2sph'}
                   className="w-full h-full border-0 filter brightness-90 contrast-125"
                   loading="lazy"
                 />
@@ -198,8 +200,6 @@ export default function Contact() {
                         className="w-full px-4 py-3 rounded-xl bg-slate-950/60 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-[#2670f2] transition-colors text-sm"
                       />
                     </div>
-
-
                   </div>
 
                   <div>
@@ -218,7 +218,7 @@ export default function Contact() {
 
                   <button
                     type="submit"
-                    className="w-full py-4 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-extrabold text-base shadow-xl flex items-center justify-center gap-2 hover:scale-[1.01] transition-all"
+                    className="w-full py-4 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-extrabold text-base shadow-xl flex items-center justify-center gap-2 hover:scale-[1.01] transition-all cursor-pointer"
                   >
                     <Send className="w-5 h-5 text-slate-950" />
                     Submit Inquiry

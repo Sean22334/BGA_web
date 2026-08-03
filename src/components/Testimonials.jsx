@@ -1,27 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Quote, ChevronLeft, ChevronRight, Star, Anchor } from 'lucide-react';
-import { TESTIMONIALS } from '../data/bgaData';
+import { useContent } from '../context/ContentContext';
 
 export default function Testimonials() {
+  const { testimonials } = useContent();
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
+    if (!testimonials || testimonials.length === 0) return;
     const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % TESTIMONIALS.length);
+      setCurrentIndex((prev) => (prev + 1) % testimonials.length);
     }, 6000);
     return () => clearInterval(timer);
-  }, []);
+  }, [testimonials]);
+
+  if (!testimonials || testimonials.length === 0) return null;
 
   const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + TESTIMONIALS.length) % TESTIMONIALS.length);
+    setCurrentIndex((prev) => (prev - 1 + testimonials.length) % testimonials.length);
   };
 
   const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % TESTIMONIALS.length);
+    setCurrentIndex((prev) => (prev + 1) % testimonials.length);
   };
 
-  const current = TESTIMONIALS[currentIndex];
+  const current = testimonials[currentIndex] || testimonials[0];
 
   return (
     <section id="testimonials" className="relative py-28 lg:py-36 bg-[#050D1A] overflow-hidden">
@@ -56,7 +60,7 @@ export default function Testimonials() {
 
             <AnimatePresence mode="wait">
               <motion.div
-                key={current.id}
+                key={current.id || currentIndex}
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
@@ -72,9 +76,11 @@ export default function Testimonials() {
                       className="w-full h-full object-cover rounded-full border-2 border-[#0B1D3A]"
                     />
                   </div>
-                  <span className="inline-block mt-3 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[#2670f2] text-[10px] font-bold uppercase tracking-wider">
-                    {current.branch}
-                  </span>
+                  {current.branch_tag || current.branch ? (
+                    <span className="inline-block mt-3 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[#2670f2] text-[10px] font-bold uppercase tracking-wider">
+                      {current.branch_tag || current.branch}
+                    </span>
+                  ) : null}
                 </div>
 
                 {/* Content Column */}
@@ -105,9 +111,9 @@ export default function Testimonials() {
             {/* Navigation Controls */}
             <div className="flex items-center justify-between mt-10 pt-6 border-t border-white/[0.06]">
               <div className="flex items-center gap-2">
-                {TESTIMONIALS.map((t, idx) => (
+                {testimonials.map((t, idx) => (
                   <button
-                    key={t.id}
+                    key={t.id || idx}
                     onClick={() => setCurrentIndex(idx)}
                     className={`h-2 rounded-full transition-all duration-300 ${
                       idx === currentIndex ? 'w-8 bg-[#2670f2]' : 'w-2 bg-slate-700 hover:bg-slate-500'

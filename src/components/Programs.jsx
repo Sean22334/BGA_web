@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Clock, GraduationCap, ArrowRight, Info, Sparkles, Calendar } from 'lucide-react';
-import { PROGRAMS } from '../data/bgaData';
+import { useContent } from '../context/ContentContext';
 import ProgramModal from './ProgramModal';
 
 export default function Programs() {
+  const { programs } = useContent();
   const [selectedProgram, setSelectedProgram] = useState(null);
 
   return (
@@ -31,9 +32,9 @@ export default function Programs() {
 
         {/* Program Cards Grid */}
         <div className="flex flex-wrap justify-center gap-8">
-          {PROGRAMS.map((program, idx) => (
+          {programs.map((program, idx) => (
             <motion.div
-              key={program.id}
+              key={program.id || program.program_id || idx}
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -51,11 +52,13 @@ export default function Programs() {
                   <div className="absolute inset-0 bg-gradient-to-t from-[#050D1A] via-[#050D1A]/40 to-transparent" />
 
                   {/* Badge */}
-                  <div className="absolute top-4 right-4">
-                    <span className="px-3 py-1 rounded-full bg-[#2670f2] text-white font-extrabold text-xs uppercase tracking-wider shadow-lg">
-                      {program.badge}
-                    </span>
-                  </div>
+                  {program.badge && (
+                    <div className="absolute top-4 right-4">
+                      <span className="px-3 py-1 rounded-full bg-[#2670f2] text-white font-extrabold text-xs uppercase tracking-wider shadow-lg">
+                        {program.badge}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="absolute bottom-4 left-5 right-5">
                     <span className="text-[11px] text-[#2670f2] font-extrabold uppercase tracking-widest block mb-1">
@@ -70,7 +73,7 @@ export default function Programs() {
                 {/* Card Body */}
                 <div className="p-6 space-y-4">
                   <p className="text-slate-300 text-sm font-normal leading-relaxed line-clamp-3">
-                    {program.shortDescription}
+                    {program.shortDescription || program.short_description}
                   </p>
 
                   <div className="space-y-2.5 pt-3 border-t border-white/10 text-xs">
@@ -92,7 +95,10 @@ export default function Programs() {
               {/* Card Actions */}
               <div className="p-6 pt-0 grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => setSelectedProgram(program)}
+                  onClick={() => setSelectedProgram({
+                    ...program,
+                    shortDescription: program.shortDescription || program.short_description
+                  })}
                   className="w-full py-3 px-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-[#2670f2]/40 text-slate-200 hover:text-white font-semibold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Info className="w-3.5 h-3.5 text-[#2670f2]" />
@@ -100,7 +106,7 @@ export default function Programs() {
                 </button>
 
                 <Link
-                  to={`/reserve?program=${program.id}`}
+                  to={`/reserve?program=${program.id || program.program_id}`}
                   className="btn-primary text-xs !py-3 !px-3 flex items-center justify-center gap-1.5"
                 >
                   <Calendar className="w-3.5 h-3.5 text-white" />
