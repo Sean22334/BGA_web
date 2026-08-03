@@ -1,4 +1,5 @@
 import { INITIAL_ORIENTATIONS, INITIAL_RESERVATIONS } from './orientationData';
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -33,6 +34,20 @@ function saveLocalReservations(data) {
 export const api = {
   // 1. Admin Login
   async loginAdmin(email, password) {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (!error && data?.session) {
+          return {
+            token: data.session.access_token,
+            admin: { email: data.user.email, id: data.user.id }
+          };
+        }
+      } catch (err) {
+        console.warn('Supabase Auth error, falling back to API:', err.message);
+      }
+    }
+
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -50,6 +65,26 @@ export const api = {
   // 2. Fetch Orientations
   async getOrientations(filters = {}) {
     const { branch, status, search } = filters;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        let query = supabase.from('orientations').select('*').order('date', { ascending: true });
+        if (branch && branch !== 'All') query = query.eq('branch', branch);
+        if (status && status !== 'All') query = query.eq('status', status);
+        if (search) query = query.ilike('title', `%${search}%`);
+
+        const { data, error } = await query;
+        if (!error && data) {
+          return data.map((o) => ({
+            ...o,
+            remaining_slots: Math.max(0, (o.capacity || 50) - (o.reserved || 0))
+          }));
+        }
+      } catch (err) {
+        console.warn('Supabase Orientations error:', err.message);
+      }
+    }
+
     try {
       const params = new URLSearchParams();
       if (branch) params.append('branch', branch);
@@ -84,6 +119,29 @@ export const api = {
 
   // 3. Create Orientation Event
   async createOrientation(eventData, token) {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.from('orientations').insert([{
+          title: eventData.title,
+          branch: eventData.branch,
+          venue: eventData.venue,
+          description: eventData.description || '',
+          date: eventData.date,
+          start_time: eventData.start_time || '09:00 AM',
+          end_time: eventData.end_time || '12:00 PM',
+          capacity: parseInt(eventData.capacity),
+          reserved: 0,
+          status: eventData.status || 'Published'
+        }]).select();
+
+        if (!error && data) {
+          return { message: 'Orientation created successfully', id: data[0].id, orientation: data[0] };
+        }
+      } catch (err) {
+        console.warn('Supabase Create Orientation error:', err.message);
+      }
+    }
+
     try {
       const res = await fetch(`${BASE_URL}/orientations`, {
         method: 'POST',
@@ -122,6 +180,17 @@ export const api = {
 
   // 4. Update Orientation Event
   async updateOrientation(id, eventData, token) {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.from('orientations').update(eventData).eq('id', id).select();
+        if (!error && data) {
+          return { message: 'Orientation updated successfully', orientation: data[0] };
+        }
+      } catch (err) {
+        console.warn('Supabase Update Orientation error:', err.message);
+      }
+    }
+
     try {
       const res = await fetch(`${BASE_URL}/orientations/${id}`, {
         method: 'PUT',
@@ -139,68 +208,26 @@ export const api = {
     }
 
     const items = getLocalOrientations();
-    const idx = items.findIndex((o) => o.id === parseInt(id));
-    if (idx !== -1) {
-      items[idx] = { ...items[idx], ...eventData, capacity: parseInt(eventData.capacity || items[idx].capacity) };
+    const index = items.findIndex((o) => String(o.id) === String(id));
+    if (index !== -1) {
+      items[index] = { ...items[index], ...eventData };
       saveLocalOrientations(items);
+      return { message: 'Orientation updated successfully', orientation: items[index] };
     }
-    return { message: 'Orientation updated successfully' };
+    throw new Error('Orientation event not found.');
   },
 
-  // 5. Change Orientation Status
-  async updateOrientationStatus(id, status, token) {
-    try {
-      const res = await fetch(`${BASE_URL}/orientations/${id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ status })
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch (err) {
-      // Fallback
-    }
-
-    const items = getLocalOrientations();
-    const event = items.find((o) => o.id === parseInt(id));
-    if (event) {
-      event.status = status;
-      saveLocalOrientations(items);
-    }
-    return { message: `Status updated to ${status}` };
-  },
-
-  // 6. Duplicate Orientation
-  async duplicateOrientation(id, token) {
-    try {
-      const res = await fetch(`${BASE_URL}/orientations/${id}/duplicate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch (err) {
-      // Fallback
-    }
-
-    const items = getLocalOrientations();
-    const orig = items.find((o) => o.id === parseInt(id));
-    if (orig) {
-      const newId = items.length > 0 ? Math.max(...items.map((o) => o.id)) + 1 : 1;
-      const dup = { ...orig, id: newId, title: `${orig.title} (Copy)`, reserved: 0, status: 'Draft' };
-      items.unshift(dup);
-      saveLocalOrientations(items);
-    }
-    return { message: 'Event duplicated successfully' };
-  },
-
-  // 7. Delete Orientation
+  // 5. Delete Orientation Event
   async deleteOrientation(id, token) {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from('orientations').delete().eq('id', id);
+        if (!error) return { message: 'Orientation deleted successfully' };
+      } catch (err) {
+        console.warn('Supabase Delete Orientation error:', err.message);
+      }
+    }
+
     try {
       const res = await fetch(`${BASE_URL}/orientations/${id}`, {
         method: 'DELETE',
@@ -213,15 +240,48 @@ export const api = {
       // Fallback
     }
 
-    let items = getLocalOrientations().filter((o) => o.id !== parseInt(id));
+    let items = getLocalOrientations();
+    items = items.filter((o) => String(o.id) !== String(id));
     saveLocalOrientations(items);
-    let resList = getLocalReservations().filter((r) => r.orientation_id !== parseInt(id));
-    saveLocalReservations(resList);
-    return { message: 'Orientation deleted' };
+
+    let reservations = getLocalReservations();
+    reservations = reservations.filter((r) => String(r.orientation_id) !== String(id));
+    saveLocalReservations(reservations);
+
+    return { message: 'Orientation deleted successfully' };
   },
 
-  // 8. Submit Public Reservation
-  async submitReservation(reservationData) {
+  // 6. Submit Reservation
+  async createReservation(reservationData) {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const refNumber = 'BGA-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+        const { data, error } = await supabase.from('reservations').insert([{
+          orientation_id: reservationData.orientation_id,
+          reference_number: refNumber,
+          full_name: reservationData.full_name,
+          phone: reservationData.phone,
+          email: reservationData.email,
+          address: reservationData.address,
+          city: reservationData.city,
+          province: reservationData.province,
+          notes: reservationData.notes || '',
+          status: 'Pending'
+        }]).select();
+
+        if (!error && data) {
+          // Increment reserved count
+          const { data: oData } = await supabase.from('orientations').select('reserved').eq('id', reservationData.orientation_id).single();
+          if (oData) {
+            await supabase.from('orientations').update({ reserved: (oData.reserved || 0) + 1 }).eq('id', reservationData.orientation_id);
+          }
+          return { message: 'Reservation submitted successfully', reservation: data[0] };
+        }
+      } catch (err) {
+        console.warn('Supabase Create Reservation error:', err.message);
+      }
+    }
+
     try {
       const res = await fetch(`${BASE_URL}/reservations`, {
         method: 'POST',
@@ -231,55 +291,29 @@ export const api = {
       if (res.ok) {
         return await res.json();
       }
-
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Failed to complete reservation.');
     } catch (err) {
-      if (err.message && !err.message.includes('fetch') && !err.message.includes('JSON')) {
-        throw err;
-      }
-      // Fallback if backend server is completely offline
+      // Fallback
     }
 
-    const items = getLocalOrientations();
-    const event = items.find((o) => o.id === parseInt(reservationData.orientation_id));
-    if (!event) throw new Error('Selected orientation event not found.');
-
-    const remaining = event.capacity - event.reserved;
-    if (remaining <= 0 || event.status === 'Fully Booked' || event.status === 'Closed') {
-      throw new Error('Sorry! This orientation session is FULLY BOOKED or closed.');
+    const oItems = getLocalOrientations();
+    const targetOrientation = oItems.find((o) => String(o.id) === String(reservationData.orientation_id));
+    if (!targetOrientation) {
+      throw new Error('Selected orientation event does not exist.');
+    }
+    if (targetOrientation.reserved >= targetOrientation.capacity) {
+      throw new Error('Selected orientation event is fully booked.');
     }
 
-    // Check if applicant has already submitted a reservation for this orientation (by email or phone)
-    const resList = getLocalReservations();
-    const existingDuplicate = resList.find(
-      (r) =>
-        (r.email.toLowerCase() === reservationData.email.toLowerCase() || r.phone === reservationData.phone) &&
-        r.orientation_id === parseInt(reservationData.orientation_id) &&
-        r.status !== 'Cancelled'
-    );
+    targetOrientation.reserved += 1;
+    saveLocalOrientations(oItems);
 
-    if (existingDuplicate) {
-      throw new Error(
-        'You have already submitted a reservation for this orientation session using this email address or phone number.'
-      );
-    }
+    const rItems = getLocalReservations();
+    const newId = rItems.length > 0 ? Math.max(...rItems.map((r) => r.id)) + 1 : 101;
+    const refNumber = 'BGA-' + Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    // Process reservation
-    event.reserved += 1;
-    if (event.reserved >= event.capacity) {
-      event.status = 'Fully Booked';
-    }
-    saveLocalOrientations(items);
-
-    const randomCode = Math.floor(1000 + Math.random() * 9000);
-    const refNumber = `BGA-2026-${randomCode}`;
-
-    const newResId = resList.length > 0 ? Math.max(...resList.map((r) => r.id)) + 1 : 1;
-
-    const newRes = {
-      id: newResId,
-      orientation_id: parseInt(reservationData.orientation_id),
+    const newReservation = {
+      id: newId,
+      orientation_id: targetOrientation.id,
       reference_number: refNumber,
       full_name: reservationData.full_name,
       phone: reservationData.phone,
@@ -289,41 +323,40 @@ export const api = {
       province: reservationData.province,
       notes: reservationData.notes || '',
       status: 'Pending',
-      created_at: new Date().toLocaleString()
+      created_at: new Date().toISOString()
     };
-    resList.unshift(newRes);
-    saveLocalReservations(resList);
 
-    // Broadcast synchronization trigger for multi-tab real-time updates
-    try {
-      window.dispatchEvent(new CustomEvent('bga_reservation_event', { detail: { type: 'RESERVATION_CREATED', data: newRes } }));
-      localStorage.setItem('bga_last_update_trigger', Date.now().toString());
-    } catch (e) {}
+    rItems.unshift(newReservation);
+    saveLocalReservations(rItems);
 
-    return {
-      message: 'Reservation submitted successfully',
-      reference_number: refNumber,
-      reservation_id: newResId,
-      orientation: {
-        id: event.id,
-        title: event.title,
-        branch: event.branch,
-        venue: event.venue,
-        date: event.date,
-        start_time: event.start_time
-      }
-    };
+    return { message: 'Reservation created successfully', reservation: newReservation };
   },
 
-  // 9. Get Reservations (Admin List with Search & Filter)
+  // 7. Get Reservations (Admin)
   async getReservations(token, filters = {}) {
-    const { orientation_id, branch, status, search } = filters;
+    const { branch, status, search, orientation_id } = filters;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        let query = supabase.from('reservations').select('*').order('created_at', { ascending: false });
+        if (status && status !== 'All') query = query.eq('status', status);
+        if (orientation_id && orientation_id !== 'All') query = query.eq('orientation_id', orientation_id);
+
+        const { data, error } = await query;
+        if (!error && data) {
+          return data;
+        }
+      } catch (err) {
+        console.warn('Supabase Get Reservations error:', err.message);
+      }
+    }
+
     try {
       const params = new URLSearchParams();
-      if (orientation_id) params.append('orientation_id', orientation_id);
       if (branch) params.append('branch', branch);
       if (status) params.append('status', status);
       if (search) params.append('search', search);
+      if (orientation_id) params.append('orientation_id', orientation_id);
 
       const res = await fetch(`${BASE_URL}/reservations?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -335,43 +368,54 @@ export const api = {
       // Fallback
     }
 
-    const items = getLocalOrientations();
-    let resList = getLocalReservations().map((r) => {
-      const o = items.find((orig) => orig.id === r.orientation_id) || {};
+    let items = getLocalReservations();
+    const orientations = getLocalOrientations();
+
+    items = items.map((r) => {
+      const o = orientations.find((ori) => String(ori.id) === String(r.orientation_id));
       return {
         ...r,
-        orientation_title: o.title || 'FREE Career Orientation',
-        orientation_branch: o.branch || 'Tagum',
-        orientation_venue: o.venue || 'BGA Training Center',
-        orientation_date: o.date || '2026-08-01',
-        orientation_time: o.start_time || '09:00 AM'
+        orientation_title: o ? o.title : 'Orientation Event',
+        orientation_branch: o ? o.branch : 'Main Branch',
+        orientation_date: o ? o.date : '',
+        orientation_time: o ? `${o.start_time} - ${o.end_time}` : ''
       };
     });
 
-    if (orientation_id && orientation_id !== 'All') {
-      resList = resList.filter((r) => r.orientation_id === parseInt(orientation_id));
-    }
     if (branch && branch !== 'All') {
-      resList = resList.filter((r) => r.orientation_branch.toLowerCase() === branch.toLowerCase());
+      items = items.filter((r) => r.orientation_branch && r.orientation_branch.toLowerCase() === branch.toLowerCase());
     }
     if (status && status !== 'All') {
-      resList = resList.filter((r) => r.status.toLowerCase() === status.toLowerCase());
+      items = items.filter((r) => r.status.toLowerCase() === status.toLowerCase());
+    }
+    if (orientation_id && orientation_id !== 'All') {
+      items = items.filter((r) => String(r.orientation_id) === String(orientation_id));
     }
     if (search) {
       const q = search.toLowerCase();
-      resList = resList.filter(
-        (r) =>
-          r.full_name.toLowerCase().includes(q) ||
-          r.reference_number.toLowerCase().includes(q) ||
-          r.phone.includes(q) ||
-          r.email.toLowerCase().includes(q)
+      items = items.filter((r) =>
+        r.full_name.toLowerCase().includes(q) ||
+        r.reference_number.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q) ||
+        r.phone.toLowerCase().includes(q)
       );
     }
-    return resList;
+    return items;
   },
 
-  // 10. Update Reservation Status (Confirm / Cancel)
-  async updateReservationStatus(id, status, token) {
+  // 8. Update Reservation Status
+  async updateReservationStatus(id, newStatus, token) {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.from('reservations').update({ status: newStatus }).eq('id', id).select();
+        if (!error && data) {
+          return { message: 'Reservation updated successfully', reservation: data[0] };
+        }
+      } catch (err) {
+        console.warn('Supabase Update Reservation error:', err.message);
+      }
+    }
+
     try {
       const res = await fetch(`${BASE_URL}/reservations/${id}/status`, {
         method: 'PATCH',
@@ -379,7 +423,7 @@ export const api = {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status: newStatus })
       });
       if (res.ok) {
         return await res.json();
@@ -388,27 +432,12 @@ export const api = {
       // Fallback
     }
 
-    const resList = getLocalReservations();
-    const r = resList.find((resItem) => resItem.id === parseInt(id));
-    if (!r) throw new Error('Reservation not found');
+    const items = getLocalReservations();
+    const target = items.find((r) => String(r.id) === String(id));
+    if (!target) throw new Error('Reservation not found.');
 
-    const prevStatus = r.status;
-    r.status = status;
-    saveLocalReservations(resList);
-
-    const items = getLocalOrientations();
-    const event = items.find((o) => o.id === r.orientation_id);
-    if (event) {
-      if (prevStatus !== 'Cancelled' && status === 'Cancelled') {
-        event.reserved = Math.max(0, event.reserved - 1);
-        if (event.status === 'Fully Booked') event.status = 'Open';
-      } else if (prevStatus === 'Cancelled' && status !== 'Cancelled') {
-        event.reserved += 1;
-        if (event.reserved >= event.capacity) event.status = 'Fully Booked';
-      }
-      saveLocalOrientations(items);
-    }
-
-    return { message: `Reservation status updated to ${status}` };
+    target.status = newStatus;
+    saveLocalReservations(items);
+    return { message: 'Reservation updated successfully', reservation: target };
   }
 };
