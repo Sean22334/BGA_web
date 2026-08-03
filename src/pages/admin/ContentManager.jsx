@@ -47,6 +47,7 @@ export default function ContentManager() {
   const [activeModal, setActiveModal] = useState(null); // 'program', 'branch', 'gallery', 'testimonial', 'faq', 'delete'
   const [modalItem, setModalItem] = useState({});
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
