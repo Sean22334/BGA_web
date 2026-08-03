@@ -65,8 +65,6 @@ export default function ContentManager() {
         setGallery(data.gallery || []);
         setTestimonials(data.testimonials || []);
         setFaqs(data.faqs || []);
-        setPartners(data.partners || []);
-        setStats(data.stats || []);
       }
     } catch (err) {
       showToast(err.message || 'Failed to load CMS data', 'error');
