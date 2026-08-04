@@ -275,7 +275,11 @@ export const api = {
           if (oData) {
             await supabase.from('orientations').update({ reserved: (oData.reserved || 0) + 1 }).eq('id', reservationData.orientation_id);
           }
-          return { message: 'Reservation submitted successfully', reservation: data[0] };
+          return {
+            message: 'Reservation submitted successfully',
+            reference_number: data[0].reference_number,
+            reservation: data[0]
+          };
         }
       } catch (err) {
         console.warn('Supabase Create Reservation error:', err.message);
@@ -329,7 +333,15 @@ export const api = {
     rItems.unshift(newReservation);
     saveLocalReservations(rItems);
 
-    return { message: 'Reservation created successfully', reservation: newReservation };
+    return {
+      message: 'Reservation created successfully',
+      reference_number: newReservation.reference_number,
+      reservation: newReservation
+    };
+  },
+
+  async submitReservation(reservationData) {
+    return this.createReservation(reservationData);
   },
 
   // 7. Get Reservations (Admin)
