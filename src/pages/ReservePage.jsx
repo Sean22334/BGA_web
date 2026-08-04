@@ -134,10 +134,12 @@ export default function ReservePage() {
       setIsSubmitting(false);
       handleCloseBookingModal();
 
+      const generatedRef = res?.reference_number || res?.reservation?.reference_number || ('BGA-' + Math.random().toString(36).substring(2, 8).toUpperCase());
+
       // Redirect to Success Page
       navigate('/success', {
         state: {
-          refNumber: res.reference_number,
+          refNumber: generatedRef,
           reservationData: {
             fullName: data.fullName,
             mobileNumber: data.mobileNumber,
@@ -145,11 +147,11 @@ export default function ReservePage() {
             currentAddress: data.currentAddress,
             city: data.city,
             province: data.province,
-            preferredBranch: res.orientation.branch,
+            preferredBranch: selectedEvent.branch || 'Main Branch',
             reservationType: 'FREE Saturday Career Orientation',
-            preferredProgram: res.orientation.title,
-            preferredDate: res.orientation.date,
-            preferredTime: res.orientation.start_time,
+            preferredProgram: selectedEvent.title || 'Career Orientation Event',
+            preferredDate: selectedEvent.date || '',
+            preferredTime: selectedEvent.start_time || '09:00 AM',
             additionalNotes: data.additionalNotes
           },
           submittedAt: new Date().toLocaleString()
