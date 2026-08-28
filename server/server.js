@@ -5,6 +5,7 @@ import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -422,6 +423,25 @@ async function initDb() {
 }
 initDb();
 
+function normalizePhone(value = '') {
+  return String(value).replace(/\D/g, '');
+}
+
+function toConfirmation(reservation, orientation) {
+  return {
+    reference_number: reservation.reference_number,
+    full_name: reservation.full_name,
+    reservation_status: reservation.status,
+    orientation_title: orientation.title,
+    orientation_branch: orientation.branch,
+    orientation_venue: orientation.venue,
+    orientation_date: orientation.date,
+    orientation_start_time: orientation.start_time,
+    orientation_end_time: orientation.end_time,
+    submitted_at: reservation.created_at
+  };
+}
+
 // Authentication Middleware
 function verifyAdminToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -525,6 +545,47 @@ app.get('/api/orientations', async (req, res) => {
     }
     return res.json(result);
   }
+});
+
+// Public booking list: only future schedules that can still accept reservations.
+app.get('/api/orientations/public', async (req, res) => {
+  const { branch, orientation_id } = req.query;
+
+  if (isDbConnected) {
+    try {
+      let query = `
+        SELECT *, (capacity - reserved) AS remaining_slots
+        FROM orientations
+        WHERE status IN ('Open', 'Published')
+          AND date >= CURDATE()
+          AND reserved < capacity
+      `;
+      const params = [];
+      if (branch) {
+        query += ' AND branch = ?';
+        params.push(branch);
+      }
+      if (orientation_id) {
+        query += ' AND id = ?';
+        params.push(orientation_id);
+      }
+      query += ' ORDER BY date ASC, start_time ASC';
+      const [rows] = await pool.query(query, params);
+      return res.json(rows);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Failed to fetch available orientations.' });
+    }
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  const result = mockOrientations
+    .filter((item) => ['Open', 'Published'].includes(item.status))
+    .filter((item) => item.date >= today && item.reserved < item.capacity)
+    .filter((item) => !branch || item.branch.toLowerCase() === branch.toLowerCase())
+    .filter((item) => !orientation_id || String(item.id) === String(orientation_id))
+    .map((item) => ({ ...item, remaining_slots: item.capacity - item.reserved }));
+  return res.json(result);
 });
 
 // Create Orientation Event (Admin Only)
@@ -692,9 +753,8 @@ app.post('/api/reservations', async (req, res) => {
     return res.status(400).json({ error: 'All required applicant fields must be provided.' });
   }
 
-  // Generate Reference Number (BGA-2026-XXXX)
-  const randomCode = Math.floor(1000 + Math.random() * 9000);
-  const refNumber = `BGA-2026-${randomCode}`;
+  // High-entropy, human-readable reference number.
+  const refNumber = `BGA-${new Date().getFullYear()}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
 
   if (isDbConnected) {
     const conn = await pool.getConnection();
@@ -828,6 +888,53 @@ app.post('/api/reservations', async (req, res) => {
       }
     });
   }
+});
+
+// Safe confirmation recovery: both reference number and phone must match.
+app.post('/api/reservations/confirmation', async (req, res) => {
+  const { reference_number, phone } = req.body;
+  if (!reference_number || !phone) {
+    return res.status(400).json({ error: 'Reference number and phone are required.' });
+  }
+
+  if (isDbConnected) {
+    try {
+      const [rows] = await pool.query(
+        `SELECT
+          r.reference_number,
+          r.full_name,
+          r.status AS reservation_status,
+          o.title AS orientation_title,
+          o.branch AS orientation_branch,
+          o.venue AS orientation_venue,
+          o.date AS orientation_date,
+          o.start_time AS orientation_start_time,
+          o.end_time AS orientation_end_time,
+          r.created_at AS submitted_at
+        FROM reservations r
+        JOIN orientations o ON o.id = r.orientation_id
+        WHERE UPPER(r.reference_number) = UPPER(?)
+          AND REGEXP_REPLACE(r.phone, '[^0-9]', '') = ?
+        LIMIT 1`,
+        [reference_number.trim(), normalizePhone(phone)]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: 'Reservation not found.' });
+      return res.json(rows[0]);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Unable to retrieve the confirmation.' });
+    }
+  }
+
+  const reservation = mockReservations.find(
+    (item) =>
+      item.reference_number.toLowerCase() === reference_number.trim().toLowerCase() &&
+      normalizePhone(item.phone) === normalizePhone(phone)
+  );
+  if (!reservation) return res.status(404).json({ error: 'Reservation not found.' });
+  const orientation = mockOrientations.find((item) => item.id === reservation.orientation_id);
+  if (!orientation) return res.status(404).json({ error: 'Reservation not found.' });
+  return res.json(toConfirmation(reservation, orientation));
 });
 
 // Get All Reservations (Admin Filter & Search)

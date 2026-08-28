@@ -7,7 +7,8 @@ Official landing page and admissions portal for **Bluechef Global Academy (BGA)*
 - **Marketing landing page** — Hero, programs, training centers, gallery, testimonials, FAQ, and contact sections
 - **Orientation reservations** — Public booking flow with branch selection, capacity checks, and confirmation pages
 - **Admin portal** — JWT-authenticated dashboard for managing orientations and reservations
-- **Dual data modes** — MySQL-backed persistence with automatic in-memory fallback when the database is unavailable
+- **Production-safe reservations** — Supabase-backed atomic booking, capacity control, RLS, and confirmation recovery
+- **Development fallback** — Express/MySQL and local demo data remain available during local development
 - **Responsive UI** — Tailwind CSS 4 with Framer Motion animations
 
 ## Tech Stack
@@ -20,6 +21,7 @@ Official landing page and admissions portal for **Bluechef Global Academy (BGA)*
 | Animation | Framer Motion |
 | Backend | Express 5, Node.js |
 | Database | MySQL 8 (via mysql2) |
+| Production reservations | Supabase Postgres + Auth + RPC/RLS |
 | Auth | JSON Web Tokens (jsonwebtoken) |
 | Linting | Oxlint |
 | Package manager | npm |
@@ -102,6 +104,28 @@ Run services individually:
 npm run client   # Frontend only
 npm run server   # Backend only
 ```
+
+## Direct Reservation Links
+
+The official standalone booking route can be opened without visiting the marketing homepage:
+
+```text
+/reserve
+/reserve?branch=Tagum
+/reserve?orientation=123
+```
+
+Branch filters remain in the URL so the links can be shared through Facebook, Messenger, or QR codes. Confirmation pages use `/success?ref=<reference>` and require the matching phone number when reopened on another device.
+
+## Supabase Reservation Migration
+
+Before deploying the direct reservation flow, apply:
+
+```text
+supabase/migrations/202608270001_direct_reservation_flow.sql
+```
+
+The migration replaces legacy orientation/reservation policies, enables RLS, and installs the atomic booking, safe confirmation lookup, and admin status-change RPCs. Production intentionally does not fall back to browser-local reservations when Supabase is unavailable.
 
 ## Build
 

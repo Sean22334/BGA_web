@@ -16,6 +16,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import OrientationsList from './pages/admin/OrientationsList';
 import ReservationsList from './pages/admin/ReservationsList';
 import ContentManager from './pages/admin/ContentManager';
+import { BookingHeader, BookingFooter } from './components/BookingChrome';
 
 const enableAdmin = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN === 'true';
 
@@ -39,10 +40,12 @@ function ScrollToTopOnRoute() {
 function MainLayout() {
   const location = useLocation();
   const isAdminRoute = enableAdmin && location.pathname.startsWith('/admin');
+  const isBookingRoute = location.pathname === '/reserve' || location.pathname === '/success';
 
   return (
     <div className="min-h-screen flex flex-col bg-[#050D1A] text-slate-100 font-sans">
-      {!isAdminRoute && <Navbar />}
+      {!isAdminRoute && !isBookingRoute && <Navbar />}
+      {isBookingRoute && <BookingHeader />}
       <div className="flex-grow">
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -71,9 +74,10 @@ function MainLayout() {
           )}
         </Routes>
       </div>
-      {!isAdminRoute && <Footer />}
-      {!isAdminRoute && <FloatingMessenger />}
-      {!isAdminRoute && <BackToTop />}
+      {!isAdminRoute && !isBookingRoute && <Footer />}
+      {isBookingRoute && <BookingFooter />}
+      {!isAdminRoute && !isBookingRoute && <FloatingMessenger />}
+      {!isAdminRoute && !isBookingRoute && <BackToTop />}
     </div>
   );
 }

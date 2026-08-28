@@ -1,174 +1,174 @@
-import React from 'react';
-import { useLocation, Link, Navigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Home, Copy, Sparkles, MapPin, Calendar, Clock, User, Phone, Mail, Award, BookOpen, RefreshCw, MessageSquare } from 'lucide-react';
-import { BRANCHES } from '../data/bgaData';
+import {
+  Award,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Copy,
+  Home,
+  Loader2,
+  MapPin,
+  RefreshCw,
+  Search,
+  Sparkles,
+  User
+} from 'lucide-react';
+import { api } from '../services/api';
+
+function formatDate(value) {
+  if (!value) return 'To be announced';
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function formatSubmittedAt(value) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('en-PH');
+}
 
 export default function SuccessPage() {
   const location = useLocation();
-  const state = location.state;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const refFromUrl = searchParams.get('ref') || '';
+  const initialConfirmation = location.state?.confirmation || null;
+  const [confirmation, setConfirmation] = useState(initialConfirmation);
+  const [referenceNumber, setReferenceNumber] = useState(refFromUrl || initialConfirmation?.reference_number || '');
+  const [phone, setPhone] = useState(() => {
+    const reference = refFromUrl || initialConfirmation?.reference_number;
+    return reference ? sessionStorage.getItem(`bga_confirmation_phone:${reference}`) || '' : '';
+  });
+  const [loading, setLoading] = useState(false);
+  const [lookupError, setLookupError] = useState('');
+  const [copied, setCopied] = useState(false);
 
-  if (!state || !state.reservationData) {
-    return <Navigate to="/reserve" replace />;
-  }
+  const lookupConfirmation = async (reference, mobile) => {
+    setLoading(true);
+    setLookupError('');
+    try {
+      const result = await api.lookupReservationConfirmation(reference.trim(), mobile.trim());
+      if (!result) {
+        setLookupError('We could not verify a reservation using those details. Check the reference number and phone, then try again.');
+        return;
+      }
+      sessionStorage.setItem(`bga_confirmation_phone:${result.reference_number}`, mobile.trim());
+      setConfirmation(result);
+      setReferenceNumber(result.reference_number);
+      setSearchParams({ ref: result.reference_number }, { replace: true });
+    } catch (err) {
+      setLookupError(err.message || 'Confirmation lookup is temporarily unavailable. Please try again shortly.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const { refNumber, reservationData, submittedAt } = state;
+  useEffect(() => {
+    if (!confirmation && refFromUrl && phone) {
+      lookupConfirmation(refFromUrl, phone);
+    }
+    // Run only for the initial URL/session recovery.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const [copied, setCopied] = React.useState(false);
+  const handleLookup = (event) => {
+    event.preventDefault();
+    lookupConfirmation(referenceNumber, phone);
+  };
 
-  const copyRefNumber = () => {
-    navigator.clipboard.writeText(refNumber);
+  const copyRefNumber = async () => {
+    await navigator.clipboard.writeText(confirmation.reference_number);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
-  return (
-    <div className="min-h-screen pt-28 pb-24 bg-[#050D1A] text-slate-100 relative overflow-hidden flex items-center justify-center">
-      {/* Background Radial Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#2670f2]/10 rounded-full blur-[180px] pointer-events-none" />
-
-      <div className="max-w-3xl w-full mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.92 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-          className="glass-panel p-8 sm:p-12 rounded-3xl border border-[#2670f2]/40 shadow-2xl text-center space-y-8 relative overflow-hidden"
-        >
-          {/* Top Decorative Accent Line */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 via-[#2670f2] to-blue-700" />
-
-          {/* Animated Success Checkmark */}
-          <div className="relative w-24 h-24 mx-auto">
-            <motion.div 
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 220, damping: 14, delay: 0.15 }}
-              className="w-full h-full rounded-full bg-gradient-to-tr from-blue-400 via-[#2670f2] to-blue-600 p-1 shadow-2xl shadow-[#2670f2]/40 flex items-center justify-center"
-            >
-              <div className="w-full h-full bg-[#07152B] rounded-full flex items-center justify-center">
-                <CheckCircle2 className="w-14 h-14 text-[#2670f2]" />
-              </div>
-            </motion.div>
+  if (!confirmation) {
+    return (
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050D1A] px-4 pb-20 pt-28 text-slate-100">
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2670f2]/10 blur-[180px]" />
+        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="glass-panel relative z-10 w-full max-w-xl rounded-3xl border border-[#2670f2]/30 p-7 shadow-2xl sm:p-10">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#2670f2]/30 bg-[#2670f2]/15">
+            <Search className="h-7 w-7 text-[#70A6FF]" />
+          </div>
+          <div className="text-center">
+            <h1 className="text-3xl font-black text-white">Retrieve Your Reservation</h1>
+            <p className="mt-3 text-sm leading-relaxed text-slate-300">Enter the official reference number and the same phone number used during booking.</p>
           </div>
 
-          {/* Header Title & Message */}
-          <div>
-            <span className="px-3.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              Reservation Successfully Received
-            </span>
+          {lookupError && <div className="mt-6 rounded-2xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-200" role="alert">{lookupError}</div>}
 
-            <h1 className="font-serif-luxury text-3xl sm:text-4xl font-extrabold text-white mt-4 tracking-tight">
-              Thank You, <span className="text-gold-gradient">{reservationData.fullName}</span>!
-            </h1>
-
-            <p className="mt-3 text-slate-300 text-sm sm:text-base font-light max-w-xl mx-auto leading-relaxed">
-              Our Admissions Team will contact you shortly to confirm your reservation and seat allocation.
-            </p>
-          </div>
-
-          {/* Official Reference Number Badge */}
-          <div className="glass-panel-gold p-4 sm:p-5 rounded-2xl border border-[#2670f2]/40 inline-flex flex-col sm:flex-row items-center justify-center gap-3 mx-auto max-w-md w-full">
-            <div className="text-center sm:text-left flex-1">
-              <div className="text-[10px] uppercase font-bold text-[#2670f2] tracking-widest">
-                Reservation Reference Number
-              </div>
-              <div className="font-mono text-2xl sm:text-3xl font-black text-white tracking-widest mt-0.5">
-                {refNumber}
-              </div>
+          <form onSubmit={handleLookup} className="mt-7 space-y-5">
+            <div>
+              <label htmlFor="confirmation-reference" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-300">Reference number</label>
+              <input id="confirmation-reference" value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value.toUpperCase())} required autoComplete="off" placeholder="BGA-2026-XXXXXXXXXX" className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-4 py-3 font-mono text-white outline-none transition focus:border-[#2670f2]" />
             </div>
-            <button 
-              onClick={copyRefNumber}
-              className={`p-2.5 rounded-xl transition-all flex items-center gap-1.5 text-xs font-semibold shrink-0 cursor-pointer ${
-                copied ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
-              title="Copy Reference Code"
-            >
-              {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-[#2670f2]" />}
-              <span>{copied ? 'Copied!' : 'Copy Code'}</span>
+            <div>
+              <label htmlFor="confirmation-phone" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-300">Reservation phone number</label>
+              <input id="confirmation-phone" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" placeholder="09XX XXX XXXX" className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-[#2670f2]" />
+            </div>
+            <button type="submit" disabled={loading} className="btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
+              {loading ? 'Verifying reservation...' : 'View confirmation'}
+            </button>
+          </form>
+          <div className="mt-6 text-center"><Link to="/reserve" className="text-sm font-semibold text-[#70A6FF] hover:text-white">Return to available schedules</Link></div>
+        </motion.div>
+      </main>
+    );
+  }
+
+  const status = confirmation.status || 'Pending';
+  const statusClasses = status === 'Confirmed'
+    ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300'
+    : status === 'Cancelled'
+      ? 'border-red-500/40 bg-red-500/20 text-red-300'
+      : 'border-amber-400/40 bg-amber-400/15 text-amber-200';
+
+  return (
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050D1A] px-4 pb-20 pt-28 text-slate-100">
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[800px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2670f2]/10 blur-[180px]" />
+      <div className="relative z-10 mx-auto w-full max-w-3xl">
+        <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel relative space-y-8 overflow-hidden rounded-3xl border border-[#2670f2]/40 p-7 text-center shadow-2xl sm:p-11">
+          <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-blue-500 via-[#2670f2] to-blue-700" />
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#2670f2]/40 bg-[#2670f2]/15 shadow-xl shadow-blue-500/20"><CheckCircle2 className="h-12 w-12 text-[#70A6FF]" /></div>
+
+          <div>
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 text-xs font-bold uppercase tracking-wider ${statusClasses}`}><Sparkles className="h-3.5 w-3.5" />Reservation {status}</span>
+            <h1 className="mt-4 text-3xl font-black text-white sm:text-4xl">Thank You, <span className="text-gold-gradient">{confirmation.full_name}</span>!</h1>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">Keep your reference number. BGA Admissions will contact you directly regarding your seat confirmation and attendance instructions.</p>
+          </div>
+
+          <div className="mx-auto flex w-full max-w-md flex-col items-center justify-center gap-3 rounded-2xl border border-[#2670f2]/40 bg-[#07152B] p-5 sm:flex-row">
+            <div className="flex-1 text-center sm:text-left">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-[#70A6FF]">Reservation Reference Number</div>
+              <div className="mt-1 font-mono text-xl font-black tracking-wider text-white sm:text-2xl">{confirmation.reference_number}</div>
+            </div>
+            <button onClick={copyRefNumber} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white/10 p-2.5 text-xs font-semibold text-white transition hover:bg-white/20">
+              {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4 text-[#70A6FF]" />}{copied ? 'Copied!' : 'Copy Code'}
             </button>
           </div>
 
-          {/* Submitted Information Summary Box */}
-          <div className="text-left bg-slate-950/80 p-6 sm:p-8 rounded-2xl border border-white/10 space-y-4 shadow-inner">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="font-serif-luxury text-lg font-bold text-white flex items-center gap-2">
-                <User className="w-4 h-4 text-[#2670f2]" />
-                Selected Orientation Summary
-              </h3>
-              <span className="text-xs font-normal text-slate-400">{submittedAt}</span>
+          <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-6 text-left shadow-inner sm:p-8">
+            <div className="flex flex-col justify-between gap-2 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-white"><User className="h-4 w-4 text-[#70A6FF]" /> Orientation Summary</h2>
+              <span className="text-xs text-slate-400">{formatSubmittedAt(confirmation.submitted_at)}</span>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
-              <div className="flex items-center gap-2.5 text-slate-300">
-                <Award className="w-4 h-4 text-[#2670f2] shrink-0" />
-                <span className="text-slate-400 font-medium">Event:</span>
-                <span className="text-white font-bold truncate">{reservationData.preferredProgram || 'FREE Career Orientation'}</span>
-              </div>
-
-              <div className="flex items-center gap-2.5 text-slate-300">
-                <MapPin className="w-4 h-4 text-[#2670f2] shrink-0" />
-                <span className="text-slate-400 font-medium">Branch:</span>
-                <span className="text-white font-bold">{reservationData.preferredBranch} Campus</span>
-              </div>
-
-              <div className="flex items-center gap-2.5 text-slate-300">
-                <Calendar className="w-4 h-4 text-[#2670f2] shrink-0" />
-                <span className="text-slate-400 font-medium">Date & Time:</span>
-                <span className="text-white font-semibold">{reservationData.preferredDate} ({reservationData.preferredTime})</span>
-              </div>
-
-              <div className="flex items-center gap-2.5 text-slate-300">
-                <Phone className="w-4 h-4 text-[#2670f2] shrink-0" />
-                <span className="text-slate-400 font-medium">Applicant Mobile:</span>
-                <span className="text-white font-semibold">{reservationData.mobileNumber}</span>
-              </div>
-
-              <div className="sm:col-span-2 flex items-start gap-2.5 text-slate-300 pt-2 border-t border-white/5">
-                <Mail className="w-4 h-4 text-[#2670f2] shrink-0 mt-0.5" />
-                <span className="text-slate-400 font-medium">Email:</span>
-                <span className="text-white font-medium truncate">{reservationData.email}</span>
-              </div>
-
-              <div className="sm:col-span-2 flex items-start gap-2.5 text-slate-300">
-                <MapPin className="w-4 h-4 text-[#2670f2] shrink-0 mt-0.5" />
-                <span className="text-slate-400 font-medium">Address:</span>
-                <span className="text-white font-medium">{reservationData.currentAddress}, {reservationData.city}, {reservationData.province}</span>
-              </div>
-
-              {reservationData.additionalNotes && (
-                <div className="sm:col-span-2 flex items-start gap-2.5 text-slate-300 pt-1">
-                  <MessageSquare className="w-4 h-4 text-[#2670f2] shrink-0 mt-0.5" />
-                  <span className="text-slate-400 font-medium">Notes:</span>
-                  <span className="text-slate-200 italic font-light">{reservationData.additionalNotes}</span>
-                </div>
-              )}
+            <div className="mt-5 grid grid-cols-1 gap-5 text-sm sm:grid-cols-2">
+              <div className="flex items-start gap-3"><Award className="mt-0.5 h-4 w-4 shrink-0 text-[#70A6FF]" /><div><div className="text-xs text-slate-400">Event</div><div className="font-bold text-white">{confirmation.orientation_title}</div></div></div>
+              <div className="flex items-start gap-3"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#70A6FF]" /><div><div className="text-xs text-slate-400">Branch & venue</div><div className="font-bold text-white">{confirmation.orientation_branch}</div><div className="mt-1 text-xs text-slate-300">{confirmation.orientation_venue}</div></div></div>
+              <div className="flex items-start gap-3"><Calendar className="mt-0.5 h-4 w-4 shrink-0 text-[#70A6FF]" /><div><div className="text-xs text-slate-400">Date</div><div className="font-semibold text-white">{formatDate(confirmation.orientation_date)}</div></div></div>
+              <div className="flex items-start gap-3"><Clock className="mt-0.5 h-4 w-4 shrink-0 text-[#70A6FF]" /><div><div className="text-xs text-slate-400">Time</div><div className="font-semibold text-white">{confirmation.orientation_start_time} - {confirmation.orientation_end_time}</div></div></div>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-            <Link
-              to="/"
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gold-gradient hover:bg-gold-gradient-hover text-slate-950 font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 transition-all hover:scale-105"
-            >
-              <Home className="w-4 h-4 text-slate-950" />
-              <span>Return Home</span>
-            </Link>
-
-            <Link
-              to="/reserve"
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl border border-slate-700 bg-white/5 hover:bg-white/10 hover:border-[#2670f2]/40 text-slate-200 hover:text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all"
-            >
-              <RefreshCw className="w-4 h-4 text-[#2670f2]" />
-              <span>Reserve Another Slot</span>
-            </Link>
+          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <Link to="/" className="btn-primary w-full justify-center sm:w-auto"><Home className="h-4 w-4" /> Return Home</Link>
+            <Link to="/reserve" className="btn-secondary w-full justify-center sm:w-auto"><RefreshCw className="h-4 w-4 text-[#70A6FF]" /> Reserve Another Slot</Link>
           </div>
-
         </motion.div>
-
       </div>
-    </div>
+    </main>
   );
 }

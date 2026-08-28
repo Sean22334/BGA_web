@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
@@ -6,29 +6,30 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
   Calendar,
-  User,
   Mail,
   Phone,
   MapPin,
-  Building,
   Clock,
   CheckCircle2,
   ChevronDown,
   Sparkles,
   ShieldCheck,
-  Award,
-  Users,
   MessageCircle,
   HelpCircle,
   ArrowRight,
   Loader2,
   AlertCircle,
-  Check,
   X,
   Zap
 } from 'lucide-react';
-import { PROGRAMS, BRANCHES } from '../data/bgaData';
 import { api } from '../services/api';
+
+const BRANCH_FILTERS = ['All', 'Tagum', 'Butuan', 'Pagadian', 'Bacolod'];
+
+function normalizeBranch(value) {
+  if (!value) return 'All';
+  return BRANCH_FILTERS.find((branch) => branch.toLowerCase() === value.toLowerCase()) || 'All';
+}
 
 // Zod Validation Schema
 const reservationSchema = z.object({
@@ -46,11 +47,15 @@ const reservationSchema = z.object({
 
 export default function ReservePage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedOrientationId = searchParams.get('orientation');
+  const requestedBranch = searchParams.get('branch');
 
   const [orientations, setOrientations] = useState([]);
   const [loadingOrientations, setLoadingOrientations] = useState(true);
-  const [selectedBranchFilter, setSelectedBranchFilter] = useState('All');
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState(() => normalizeBranch(searchParams.get('branch')));
+  const [scheduleNotice, setScheduleNotice] = useState('');
+  const handledDeepLinkRef = useRef(null);
 
   // Booking Modal State
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -63,7 +68,6 @@ export default function ReservePage() {
   const {
     register,
     handleSubmit,
-    setValue,
     reset,
     formState: { errors }
   } = useForm({
@@ -82,20 +86,47 @@ export default function ReservePage() {
 
   useEffect(() => {
     fetchOrientations();
-  }, [selectedBranchFilter]);
+    // fetchOrientations intentionally owns the request lifecycle for these URL filters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBranchFilter, requestedOrientationId, requestedBranch]);
 
   const fetchOrientations = async () => {
     setLoadingOrientations(true);
+    setScheduleNotice('');
     try {
-      const data = await api.getOrientations({
+      const data = await api.getPublicOrientations({
         branch: selectedBranchFilter === 'All' ? null : selectedBranchFilter
       });
       setOrientations(data || []);
+
+      if (requestedOrientationId && handledDeepLinkRef.current !== requestedOrientationId) {
+        handledDeepLinkRef.current = requestedOrientationId;
+        const requestedEvent = (data || []).find((event) => String(event.id) === String(requestedOrientationId));
+        if (requestedEvent) {
+          handleOpenBookingModal(requestedEvent);
+        } else {
+          setScheduleNotice('That orientation is unavailable, full, closed, or already past. Please choose from the available schedules below.');
+        }
+      } else if (requestedBranch && normalizeBranch(requestedBranch) === 'All' && requestedBranch.toLowerCase() !== 'all') {
+        setScheduleNotice(`“${requestedBranch}” is not a recognized BGA branch. Showing all available schedules instead.`);
+      }
     } catch (err) {
       console.error(err);
+      setScheduleNotice(err.message || 'Available schedules could not be loaded. Please try again shortly.');
     } finally {
       setLoadingOrientations(false);
     }
+  };
+
+  const handleBranchFilterChange = (branch) => {
+    setSelectedBranchFilter(branch);
+    setScheduleNotice('');
+    handledDeepLinkRef.current = null;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('orientation');
+    if (branch === 'All') nextParams.delete('branch');
+    else nextParams.set('branch', branch);
+    setSearchParams(nextParams, { replace: true });
   };
 
   const handleOpenBookingModal = (event) => {
@@ -134,27 +165,28 @@ export default function ReservePage() {
       setIsSubmitting(false);
       handleCloseBookingModal();
 
-      const generatedRef = res?.reference_number || res?.reservation?.reference_number || ('BGA-' + Math.random().toString(36).substring(2, 8).toUpperCase());
+      const generatedRef = res?.reference_number || res?.confirmation?.reference_number;
+      if (!generatedRef) throw new Error('Reservation was received but no confirmation reference was returned. Please contact Admissions.');
+
+      const confirmation = res?.confirmation || {
+        reference_number: generatedRef,
+        full_name: data.fullName,
+        status: 'Pending',
+        orientation_title: selectedEvent.title,
+        orientation_branch: selectedEvent.branch,
+        orientation_venue: selectedEvent.venue,
+        orientation_date: selectedEvent.date,
+        orientation_start_time: selectedEvent.start_time,
+        orientation_end_time: selectedEvent.end_time,
+        submitted_at: new Date().toISOString()
+      };
+
+      sessionStorage.setItem(`bga_confirmation_phone:${generatedRef}`, data.mobileNumber);
 
       // Redirect to Success Page
-      navigate('/success', {
+      navigate(`/success?ref=${encodeURIComponent(generatedRef)}`, {
         state: {
-          refNumber: generatedRef,
-          reservationData: {
-            fullName: data.fullName,
-            mobileNumber: data.mobileNumber,
-            email: data.email,
-            currentAddress: data.currentAddress,
-            city: data.city,
-            province: data.province,
-            preferredBranch: selectedEvent.branch || 'Main Branch',
-            reservationType: 'FREE Saturday Career Orientation',
-            preferredProgram: selectedEvent.title || 'Career Orientation Event',
-            preferredDate: selectedEvent.date || '',
-            preferredTime: selectedEvent.start_time || '09:00 AM',
-            additionalNotes: data.additionalNotes
-          },
-          submittedAt: new Date().toLocaleString()
+          confirmation
         }
       });
     } catch (err) {
@@ -269,10 +301,10 @@ export default function ReservePage() {
                 Campus Filter:
               </span>
               <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                {['All', 'Tagum', 'Butuan', 'Pagadian', 'Bacolod'].map((b) => (
+                {BRANCH_FILTERS.map((b) => (
                   <button
                     key={b}
-                    onClick={() => setSelectedBranchFilter(b)}
+                    onClick={() => handleBranchFilterChange(b)}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                       selectedBranchFilter === b
                         ? 'btn-primary !py-2 !px-3.5'
@@ -287,6 +319,12 @@ export default function ReservePage() {
 
             {/* Available Orientation Cards Container */}
             <div className="space-y-4">
+              {scheduleNotice && (
+                <div className="flex items-start gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100" role="status">
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                  <span>{scheduleNotice}</span>
+                </div>
+              )}
               {loadingOrientations ? (
                 <div className="py-16 text-center text-slate-400 surface-card">
                   <Loader2 className="w-8 h-8 animate-spin text-[#2670f2] mx-auto mb-2" />
@@ -308,6 +346,8 @@ export default function ReservePage() {
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
                       className={`surface-card p-6 sm:p-7 transition-all relative overflow-hidden ${
+                        String(event.id) === String(requestedOrientationId) ? 'ring-2 ring-[#2670f2] shadow-2xl shadow-blue-500/20' : ''
+                      } ${
                         isFull
                           ? 'opacity-80'
                           : 'hover:border-[#2670f2]/40 hover:shadow-2xl'
