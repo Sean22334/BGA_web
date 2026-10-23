@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Lock, Mail, ShieldCheck, ArrowRight, Loader2, AlertCircle, Sparkles } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { Lock, Mail, ShieldCheck, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { useAuth } from '../../context/useAuth';
 import { api } from '../../services/api';
 
 export default function AdminLogin() {
@@ -24,7 +24,7 @@ export default function AdminLogin() {
 
     try {
       const data = await api.loginAdmin(email, password);
-      loginAdmin(data.admin, data.token);
+      loginAdmin(data.admin, data.token, data.provider);
       navigate(from, { replace: true });
     } catch (err) {
       setError(err.message || 'Invalid email or password.');
@@ -80,12 +80,14 @@ export default function AdminLogin() {
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
+              <label htmlFor="admin-email" className="block text-xs font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
                 Admin Email *
               </label>
               <div className="relative">
                 <input
                   type="email"
+                  id="admin-email"
+                  autoComplete="username"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -97,12 +99,14 @@ export default function AdminLogin() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
+              <label htmlFor="admin-password" className="block text-xs font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
                 Password *
               </label>
               <div className="relative">
                 <input
                   type="password"
+                  id="admin-password"
+                  autoComplete="current-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -113,13 +117,7 @@ export default function AdminLogin() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" defaultChecked className="rounded bg-slate-900 border-slate-700 text-[#2670f2]" />
-                <span>Remember session</span>
-              </label>
-              <span className="hover:text-[#2670f2] cursor-pointer transition-colors">Forgot Password?</span>
-            </div>
+            <p className="text-xs text-slate-400">Your session stays active on this browser. Sign out when using a shared device. Contact your administrator for password resets.</p>
 
             <button
               type="submit"

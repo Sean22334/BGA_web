@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getPublicContent } from '../services/cmsApi';
+import { ContentContext } from './useContent';
+import { normalizeCmsContent } from '../lib/cmsContent';
 import {
   ACADEMY_STATS,
   PROGRAMS,
@@ -45,8 +47,6 @@ const DEFAULT_SETTINGS = {
   announcement_active: 'true'
 };
 
-const ContentContext = createContext(null);
-
 export function ContentProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [stats, setStats] = useState(ACADEMY_STATS);
@@ -57,42 +57,39 @@ export function ContentProvider({ children }) {
   const [faqs, setFaqs] = useState(FAQS);
   const [partners, setPartners] = useState(PARTNER_CRUISE_LINES);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const fetchContent = async () => {
+  const fetchContent = useCallback(async () => {
     try {
-      const data = await getPublicContent();
+      const content = await getPublicContent();
+      const data = content ? normalizeCmsContent(content) : null;
       if (data) {
         if (data.settings) {
-          const parsedSettings = { ...data.settings };
-          if (typeof parsedSettings.hero_trust_badges === 'string') {
-            try { parsedSettings.hero_trust_badges = JSON.parse(parsedSettings.hero_trust_badges); } catch (e) {}
-          }
-          if (typeof parsedSettings.about_why_items === 'string') {
-            try { parsedSettings.about_why_items = JSON.parse(parsedSettings.about_why_items); } catch (e) {}
-          }
-          setSettings((prev) => ({ ...prev, ...parsedSettings }));
+          setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
         }
-        if (data.stats && data.stats.length > 0) setStats(data.stats);
-        if (data.programs && data.programs.length > 0) setPrograms(data.programs);
-        if (data.branches && data.branches.length > 0) setBranches(data.branches);
-        if (data.gallery && data.gallery.length > 0) setGallery(data.gallery);
-        if (data.testimonials && data.testimonials.length > 0) setTestimonials(data.testimonials);
-        if (data.faqs && data.faqs.length > 0) setFaqs(data.faqs);
-        if (data.partners && data.partners.length > 0) {
+        if (data.stats) setStats(data.stats);
+        if (data.programs) setPrograms(data.programs);
+        if (data.branches) setBranches(data.branches);
+        if (data.gallery) setGallery(data.gallery);
+        if (data.testimonials) setTestimonials(data.testimonials);
+        if (data.faqs) setFaqs(data.faqs);
+        if (data.partners) {
           const partnerNames = data.partners.map((p) => typeof p === 'string' ? p : p.name);
           setPartners(partnerNames);
         }
+        setError(null);
       }
     } catch (err) {
+      setError(err.message || 'Website content could not be refreshed.');
       console.warn('ContentContext fetch warning:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchContent();
-  }, []);
+  }, [fetchContent]);
 
   return (
     <ContentContext.Provider
@@ -106,18 +103,11 @@ export function ContentProvider({ children }) {
         faqs,
         partners,
         loading,
+        error,
         refreshContent: fetchContent
       }}
     >
       {children}
     </ContentContext.Provider>
   );
-}
-
-export function useContent() {
-  const ctx = useContext(ContentContext);
-  if (!ctx) {
-    throw new Error('useContent must be used within a ContentProvider');
-  }
-  return ctx;
 }

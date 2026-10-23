@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -10,14 +10,12 @@ import {
   PlusCircle,
   TrendingUp,
   Sparkles,
-  MapPin,
   Loader2,
   ArrowUpRight,
-  UserCheck,
   Building
 } from 'lucide-react';
 import { api } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 
 export default function AdminDashboard() {
   const { token } = useAuth();
@@ -25,6 +23,25 @@ export default function AdminDashboard() {
   const [orientations, setOrientations] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState('All');
+
+
+
+  const fetchDashboardData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    try {
+      const branchFilter = selectedBranch === 'All' ? null : selectedBranch;
+      const [oList, rList] = await Promise.all([
+        api.getOrientations({ branch: branchFilter }),
+        api.getReservations(token, { branch: branchFilter })
+      ]);
+      setOrientations(oList || []);
+      setReservations(rList || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      if (!isSilent) setLoading(false);
+    }
+  }, [token, selectedBranch]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -44,24 +61,7 @@ export default function AdminDashboard() {
       window.removeEventListener('bga_reservation_event', handleSync);
       window.removeEventListener('storage', handleSync);
     };
-  }, [token, selectedBranch]);
-
-  const fetchDashboardData = async (isSilent = false) => {
-    if (!isSilent) setLoading(true);
-    try {
-      const branchFilter = selectedBranch === 'All' ? null : selectedBranch;
-      const [oList, rList] = await Promise.all([
-        api.getOrientations({ branch: branchFilter }),
-        api.getReservations(token, { branch: branchFilter })
-      ]);
-      setOrientations(oList || []);
-      setReservations(rList || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      if (!isSilent) setLoading(false);
-    }
-  };
+  }, [fetchDashboardData]);
 
   // Compute Metrics
   const totalReservations = reservations.length;

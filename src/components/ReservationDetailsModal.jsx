@@ -9,13 +9,10 @@ import {
   Calendar,
   Clock,
   Building,
-  Award,
   MessageSquare,
   CheckCircle2,
   XCircle,
-  Copy,
-  Sparkles,
-  FileText
+  Copy
 } from 'lucide-react';
 
 export default function ReservationDetailsModal({

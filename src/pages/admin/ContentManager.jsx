@@ -26,7 +26,9 @@ import {
   deleteCollectionItem,
   uploadImage
 } from '../../services/cmsApi';
-import { useContent } from '../../context/ContentContext';
+import { useContent } from '../../context/useContent';
+import { parseList } from '../../lib/cmsContent';
+import CmsSimpleCollection from '../../components/CmsSimpleCollection';
 
 export default function ContentManager() {
   const { refreshContent } = useContent();
@@ -42,6 +44,9 @@ export default function ContentManager() {
   const [gallery, setGallery] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
   const [faqs, setFaqs] = useState([]);
+  const [stats, setStats] = useState([]);
+  const [partners, setPartners] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
   // Modal & Form States
   const [activeModal, setActiveModal] = useState(null); // 'program', 'branch', 'gallery', 'testimonial', 'faq', 'delete'
@@ -56,6 +61,7 @@ export default function ContentManager() {
 
   const loadData = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const data = await getAdminCMSContent();
       if (data) {
@@ -65,8 +71,11 @@ export default function ContentManager() {
         setGallery(data.gallery || []);
         setTestimonials(data.testimonials || []);
         setFaqs(data.faqs || []);
+        setStats(data.stats || []);
+        setPartners(data.partners || []);
       }
     } catch (err) {
+      setLoadError(err.message || 'Failed to load CMS data');
       showToast(err.message || 'Failed to load CMS data', 'error');
     } finally {
       setLoading(false);
@@ -96,6 +105,7 @@ export default function ContentManager() {
 
     setUploading(true);
     const reader = new FileReader();
+    reader.onerror = () => { setUploading(false); showToast('The image could not be read. Try another file.', 'error'); };
     reader.onload = async (uploadEvent) => {
       try {
         const result = await uploadImage(uploadEvent.target.result, file.name);
@@ -150,6 +160,8 @@ export default function ContentManager() {
     { id: 'gallery', name: 'Campus Gallery', icon: ImageIcon },
     { id: 'testimonials', name: 'Testimonials', icon: Quote },
     { id: 'faqs', name: 'FAQs', icon: HelpCircle },
+    { id: 'stats', name: 'Academy Statistics', icon: GraduationCap },
+    { id: 'partners', name: 'Partners', icon: Globe },
     { id: 'contact', name: 'Contact & Social', icon: MessageSquare }
   ];
 
@@ -160,6 +172,10 @@ export default function ContentManager() {
         <p className="text-sm font-medium">Loading BGA Content Management System...</p>
       </div>
     );
+  }
+
+  if (loadError) {
+    return <div role="alert" className="rounded-2xl border border-red-400/30 p-6 space-y-4"><p>{loadError}</p><button onClick={loadData} className="btn-primary">Retry loading content</button></div>;
   }
 
   return (
@@ -236,7 +252,7 @@ export default function ContentManager() {
             </div>
             <button
               onClick={handleSaveSettings}
-              disabled={saving}
+              disabled={uploading || saving}
               className="btn-primary text-xs !py-2.5 !px-5 flex items-center gap-2 shadow-lg cursor-pointer"
             >
               <Save className="w-4 h-4" />
@@ -353,7 +369,7 @@ export default function ContentManager() {
             </div>
             <button
               onClick={handleSaveSettings}
-              disabled={saving}
+              disabled={uploading || saving}
               className="btn-primary text-xs !py-2.5 !px-5 flex items-center gap-2 shadow-lg cursor-pointer"
             >
               <Save className="w-4 h-4" />
@@ -481,7 +497,7 @@ export default function ContentManager() {
                       setModalItem({
                         ...prog,
                         short_description: prog.shortDescription || prog.short_description,
-                        highlights: Array.isArray(prog.highlights) ? prog.highlights : (typeof prog.highlights === 'string' ? JSON.parse(prog.highlights) : [])
+                        highlights: parseList(prog.highlights)
                       });
                       setActiveModal('program');
                     }}
@@ -557,7 +573,7 @@ export default function ContentManager() {
                     onClick={() => {
                       setModalItem({
                         ...b,
-                        features: Array.isArray(b.features) ? b.features : (typeof b.features === 'string' ? JSON.parse(b.features) : [])
+                        features: parseList(b.features)
                       });
                       setActiveModal('branch');
                     }}
@@ -783,6 +799,9 @@ export default function ContentManager() {
       {/* ==================================================================== */}
       {/* TAB 8: CONTACT & SOCIAL */}
       {/* ==================================================================== */}
+      {['stats', 'partners'].includes(activeTab) && (
+        <CmsSimpleCollection key={activeTab} collection={activeTab} items={activeTab === 'stats' ? stats : partners} saving={saving} onSave={handleSaveItem} onDelete={(item) => { setDeleteTarget({ collection: activeTab, id: item.id, title: item.name || item.label }); setActiveModal('delete'); }} />
+      )}
       {activeTab === 'contact' && (
         <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
           <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -792,7 +811,7 @@ export default function ContentManager() {
             </div>
             <button
               onClick={handleSaveSettings}
-              disabled={saving}
+              disabled={uploading || saving}
               className="btn-primary text-xs !py-2.5 !px-5 flex items-center gap-2 shadow-lg cursor-pointer"
             >
               <Save className="w-4 h-4" />
@@ -1003,7 +1022,7 @@ export default function ContentManager() {
               </button>
               <button
                 onClick={() => handleSaveItem('programs', modalItem, Boolean(modalItem.id))}
-                disabled={saving || !modalItem.title}
+                disabled={uploading || saving || !modalItem.title}
                 className="btn-primary text-xs !py-2.5 !px-5"
               >
                 {saving ? 'Saving...' : 'Save Program'}
@@ -1118,7 +1137,7 @@ export default function ContentManager() {
               </button>
               <button
                 onClick={() => handleSaveItem('branches', modalItem, Boolean(modalItem.id))}
-                disabled={saving || !modalItem.name}
+                disabled={uploading || saving || !modalItem.name}
                 className="btn-primary text-xs !py-2.5 !px-5"
               >
                 {saving ? 'Saving...' : 'Save Branch'}
@@ -1198,7 +1217,7 @@ export default function ContentManager() {
               </button>
               <button
                 onClick={() => handleSaveItem('gallery', modalItem, Boolean(modalItem.id))}
-                disabled={saving || !modalItem.title || !modalItem.image}
+                disabled={uploading || saving || !modalItem.title || !modalItem.image}
                 className="btn-primary text-xs !py-2.5 !px-5"
               >
                 {saving ? 'Saving...' : 'Save Photo'}
@@ -1305,7 +1324,7 @@ export default function ContentManager() {
               </button>
               <button
                 onClick={() => handleSaveItem('testimonials', modalItem, Boolean(modalItem.id))}
-                disabled={saving || !modalItem.name || !modalItem.quote}
+                disabled={uploading || saving || !modalItem.name || !modalItem.quote}
                 className="btn-primary text-xs !py-2.5 !px-5"
               >
                 {saving ? 'Saving...' : 'Save Testimonial'}
@@ -1358,7 +1377,7 @@ export default function ContentManager() {
               </button>
               <button
                 onClick={() => handleSaveItem('faqs', modalItem, Boolean(modalItem.id))}
-                disabled={saving || !modalItem.question || !modalItem.answer}
+                disabled={uploading || saving || !modalItem.question || !modalItem.answer}
                 className="btn-primary text-xs !py-2.5 !px-5"
               >
                 {saving ? 'Saving...' : 'Save FAQ'}
@@ -1388,7 +1407,7 @@ export default function ContentManager() {
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                disabled={saving}
+                disabled={uploading || saving}
                 className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg cursor-pointer"
               >
                 {saving ? 'Deleting...' : 'Yes, Delete Item'}

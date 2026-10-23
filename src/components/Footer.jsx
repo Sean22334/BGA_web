@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, ArrowUpRight } from 'lucide-react';
 import { FacebookIcon } from './SocialIcons';
-import { useContent } from '../context/ContentContext';
+import { useContent } from '../context/useContent';
 
 export default function Footer() {
   const { settings, programs, branches } = useContent();

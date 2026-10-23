@@ -1,0 +1,59 @@
+name: Application checks
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_ROOT_HOST: '%'
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -ptest"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: bga_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      MYSQL_TEST_URL: mysql://root:test@127.0.0.1:3306
+      POSTGRES_TEST_URL: postgres://postgres:test@127.0.0.1:5432/bga_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm audit --audit-level=moderate
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-test-report
+          path: playwright-report/
+          retention-days: 7

@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Anchor, Compass, Calendar, ArrowRight, ShieldCheck, Award, Users, MapPin } from 'lucide-react';
-import { useContent } from '../context/ContentContext';
+import { useContent } from '../context/useContent';
 
 export default function Hero() {
   const { settings, stats } = useContent();
@@ -30,7 +30,8 @@ export default function Hero() {
         <img
           src={settings.hero_bg_image || '/images/BGA LOGOOO.png'}
           alt="Luxury International Cruise Ship"
-          className="w-[1900px] h-[1000px] object-cover object-center scale-105 filter brightness-75 contrast-125"
+          fetchPriority="high"
+          className="w-full h-full object-cover object-center scale-105 filter brightness-75 contrast-125"
         />
         {/* Navy Overlay Gradients */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#050D1A] via-[#050D1A]/80 to-[#07152B]/60" />

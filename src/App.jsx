@@ -1,24 +1,28 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import FloatingMessenger from './components/FloatingMessenger';
 import BackToTop from './components/BackToTop';
-import HomePage from './pages/HomePage';
-import ReservePage from './pages/ReservePage';
-import SuccessPage from './pages/SuccessPage';
 import { AuthProvider } from './context/AuthContext';
 import { ContentProvider } from './context/ContentContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import AdminLogin from './pages/admin/AdminLogin';
-import AdminLayout from './pages/admin/AdminLayout';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import OrientationsList from './pages/admin/OrientationsList';
-import ReservationsList from './pages/admin/ReservationsList';
-import ContentManager from './pages/admin/ContentManager';
 import { BookingHeader, BookingFooter } from './components/BookingChrome';
 
 const enableAdmin = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN === 'true';
+const HomePage = lazy(() => import('./pages/HomePage'));
+const ReservePage = lazy(() => import('./pages/ReservePage'));
+const SuccessPage = lazy(() => import('./pages/SuccessPage'));
+const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const OrientationsList = lazy(() => import('./pages/admin/OrientationsList'));
+const ReservationsList = lazy(() => import('./pages/admin/ReservationsList'));
+const ContentManager = lazy(() => import('./pages/admin/ContentManager'));
+
+function PageLoading() {
+  return <div role="status" className="px-4 py-32 text-center text-slate-300">Loading page...</div>;
+}
 
 function ScrollToTopOnRoute() {
   const { pathname, hash } = useLocation();
@@ -47,6 +51,7 @@ function MainLayout() {
       {!isAdminRoute && !isBookingRoute && <Navbar />}
       {isBookingRoute && <BookingHeader />}
       <div className="flex-grow">
+        <Suspense fallback={<PageLoading />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/reserve" element={<ReservePage />} />
@@ -72,7 +77,9 @@ function MainLayout() {
           ) : (
             <Route path="/admin/*" element={<Navigate to="/" replace />} />
           )}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </div>
       {!isAdminRoute && !isBookingRoute && <Footer />}
       {isBookingRoute && <BookingFooter />}

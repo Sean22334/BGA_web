@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import {
   Calendar,
   PlusCircle,
@@ -9,16 +8,13 @@ import {
   Edit,
   Trash2,
   Lock,
-  Eye,
-  CheckCircle2,
   Building,
   Loader2,
   Sparkles,
-  AlertTriangle,
   Users
 } from 'lucide-react';
 import { api } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import OrientationFormModal from './OrientationFormModal';
 
 import ConfirmModal from '../../components/ConfirmModal';
@@ -48,11 +44,9 @@ export default function OrientationsList() {
     onConfirm: null
   });
 
-  useEffect(() => {
-    fetchOrientations();
-  }, [token, selectedBranch, selectedStatus, search]);
 
-  const fetchOrientations = async () => {
+
+  const fetchOrientations = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.getOrientations({
@@ -66,7 +60,11 @@ export default function OrientationsList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedBranch, selectedStatus, search]);
+
+  useEffect(() => {
+    fetchOrientations();
+  }, [fetchOrientations]);
 
   // Actions
   const handleOpenCreateModal = () => {

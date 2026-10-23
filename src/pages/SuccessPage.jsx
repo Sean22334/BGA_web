@@ -30,6 +30,10 @@ function formatSubmittedAt(value) {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('en-PH');
 }
 
+function savedPhone(reference) {
+  try { return sessionStorage.getItem(`bga_confirmation_phone:${reference}`) || ''; } catch { return ''; }
+}
+
 export default function SuccessPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -39,7 +43,7 @@ export default function SuccessPage() {
   const [referenceNumber, setReferenceNumber] = useState(refFromUrl || initialConfirmation?.reference_number || '');
   const [phone, setPhone] = useState(() => {
     const reference = refFromUrl || initialConfirmation?.reference_number;
-    return reference ? sessionStorage.getItem(`bga_confirmation_phone:${reference}`) || '' : '';
+    return reference ? savedPhone(reference) : '';
   });
   const [loading, setLoading] = useState(false);
   const [lookupError, setLookupError] = useState('');
@@ -54,7 +58,7 @@ export default function SuccessPage() {
         setLookupError('We could not verify a reservation using those details. Check the reference number and phone, then try again.');
         return;
       }
-      sessionStorage.setItem(`bga_confirmation_phone:${result.reference_number}`, mobile.trim());
+      try { sessionStorage.setItem(`bga_confirmation_phone:${result.reference_number}`, mobile.trim()); } catch { /* Manual recovery is still available. */ }
       setConfirmation(result);
       setReferenceNumber(result.reference_number);
       setSearchParams({ ref: result.reference_number }, { replace: true });
@@ -66,12 +70,23 @@ export default function SuccessPage() {
   };
 
   useEffect(() => {
-    if (!confirmation && refFromUrl && phone) {
-      lookupConfirmation(refFromUrl, phone);
-    }
-    // Run only for the initial URL/session recovery.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    let active = true;
+    const mobile = savedPhone(refFromUrl);
+    setReferenceNumber(refFromUrl);
+    setConfirmation(null);
+    setPhone(mobile);
+    setLookupError('');
+    if (!refFromUrl || !mobile) return;
+    setLoading(true);
+    api.lookupReservationConfirmation(refFromUrl, mobile).then((result) => {
+      if (!active) return;
+      if (result) setConfirmation(result);
+      else setLookupError('We could not verify a reservation using those details. Check the reference number and phone, then try again.');
+    }).catch((error) => {
+      if (active) setLookupError(error.message || 'Confirmation lookup is temporarily unavailable. Please try again shortly.');
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [refFromUrl]);
 
   const handleLookup = (event) => {
     event.preventDefault();
@@ -79,9 +94,13 @@ export default function SuccessPage() {
   };
 
   const copyRefNumber = async () => {
-    await navigator.clipboard.writeText(confirmation.reference_number);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    try {
+      await navigator.clipboard.writeText(confirmation.reference_number);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setLookupError('Copy is unavailable in this browser. Select and copy your reference number above.');
+    }
   };
 
   if (!confirmation) {
@@ -102,7 +121,7 @@ export default function SuccessPage() {
           <form onSubmit={handleLookup} className="mt-7 space-y-5">
             <div>
               <label htmlFor="confirmation-reference" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-300">Reference number</label>
-              <input id="confirmation-reference" value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value.toUpperCase())} required autoComplete="off" placeholder="BGA-2026-XXXXXXXXXX" className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-4 py-3 font-mono text-white outline-none transition focus:border-[#2670f2]" />
+              <input id="confirmation-reference" value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value.toUpperCase())} required autoComplete="off" placeholder="Your BGA reservation reference" className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-4 py-3 font-mono text-white outline-none transition focus:border-[#2670f2]" />
             </div>
             <div>
               <label htmlFor="confirmation-phone" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-300">Reservation phone number</label>
@@ -141,15 +160,16 @@ export default function SuccessPage() {
           </div>
 
           <div className="mx-auto flex w-full max-w-md flex-col items-center justify-center gap-3 rounded-2xl border border-[#2670f2]/40 bg-[#07152B] p-5 sm:flex-row">
-            <div className="flex-1 text-center sm:text-left">
+            <div className="min-w-0 flex-1 text-center sm:text-left">
               <div className="text-[10px] font-bold uppercase tracking-widest text-[#70A6FF]">Reservation Reference Number</div>
-              <div className="mt-1 font-mono text-xl font-black tracking-wider text-white sm:text-2xl">{confirmation.reference_number}</div>
+              <div className="mt-1 break-all font-mono text-lg font-black tracking-wide text-white sm:text-xl">{confirmation.reference_number}</div>
             </div>
             <button onClick={copyRefNumber} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white/10 p-2.5 text-xs font-semibold text-white transition hover:bg-white/20">
               {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4 text-[#70A6FF]" />}{copied ? 'Copied!' : 'Copy Code'}
             </button>
           </div>
 
+          {lookupError && <p role="alert" className="text-sm text-amber-200">{lookupError}</p>}
           <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-6 text-left shadow-inner sm:p-8">
             <div className="flex flex-col justify-between gap-2 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
               <h2 className="flex items-center gap-2 text-lg font-bold text-white"><User className="h-4 w-4 text-[#70A6FF]" /> Orientation Summary</h2>

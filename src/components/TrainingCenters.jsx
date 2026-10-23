@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MapPin, Phone, Mail, Clock, ExternalLink, Calendar, CheckCircle } from 'lucide-react';
-import { useContent } from '../context/ContentContext';
+import { useContent } from '../context/useContent';
 
 export default function TrainingCenters() {
   const { branches } = useContent();
@@ -30,9 +30,7 @@ export default function TrainingCenters() {
         {/* Branch Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {branches.map((branch, idx) => {
-            const features = Array.isArray(branch.features)
-              ? branch.features
-              : (typeof branch.features === 'string' ? JSON.parse(branch.features) : []);
+            const features = Array.isArray(branch.features) ? branch.features : [];
 
             return (
               <motion.div
@@ -75,6 +73,8 @@ export default function TrainingCenters() {
                     <img 
                       src={branch.image} 
                       alt={branch.name} 
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#07152B] via-transparent to-transparent" />

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Quote, ChevronLeft, ChevronRight, Star, Anchor } from 'lucide-react';
-import { useContent } from '../context/ContentContext';
+import { useContent } from '../context/useContent';
 
 export default function Testimonials() {
   const { testimonials } = useContent();
@@ -73,6 +73,8 @@ export default function Testimonials() {
                     <img 
                       src={current.avatar} 
                       alt={current.name} 
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover rounded-full border-2 border-[#0B1D3A]"
                     />
                   </div>

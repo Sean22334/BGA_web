@@ -8,6 +8,7 @@ const supabaseUrl = rawUrl.trim().replace(/\/rest\/v1\/?$/i, '').replace(/\/+$/,
 const supabaseAnonKey = rawKey.trim();
 
 export const isSupabaseConfigured = Boolean(
+  !(import.meta.env.DEV && import.meta.env.VITE_DEMO_MODE === 'true') &&
   supabaseUrl &&
   supabaseAnonKey &&
   supabaseUrl !== 'https://your-project.supabase.co' &&

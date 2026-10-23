@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Anchor, ChefHat, Menu, X, ChevronRight, Sparkles, Phone, Calendar } from 'lucide-react';
-import { useContent } from '../context/ContentContext';
+import { Menu, X, ChevronRight, Phone, Calendar } from 'lucide-react';
+import { useContent } from '../context/useContent';
 
 export default function Navbar() {
   const { settings } = useContent();

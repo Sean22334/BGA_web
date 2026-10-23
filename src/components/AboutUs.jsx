@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Target, Eye, ShieldCheck, Sparkles, CheckCircle2, Building2, Anchor } from 'lucide-react';
-import { useContent } from '../context/ContentContext';
+import { useContent } from '../context/useContent';
 
 export default function AboutUs() {
   const { settings, partners } = useContent();
@@ -20,7 +20,7 @@ export default function AboutUs() {
     { title: 'Veteran Industry Faculty', desc: 'Learn directly from former cruise ship Executive Chefs, F&B Managers, and Chief Housekeepers.', icon: 'Sparkles' }
   ];
 
-  const whyChooseUs = whyChooseUsRaw.map((item, idx) => ({
+  const whyChooseUs = whyChooseUsRaw.map((item) => ({
     ...item,
     icon: typeof item.icon === 'string' ? (iconMap[item.icon] || ShieldCheck) : (item.icon || ShieldCheck)
   }));

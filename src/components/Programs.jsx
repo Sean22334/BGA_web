@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Clock, GraduationCap, ArrowRight, Info, Sparkles, Calendar } from 'lucide-react';
-import { useContent } from '../context/ContentContext';
+import { useContent } from '../context/useContent';
 import ProgramModal from './ProgramModal';
 
 export default function Programs() {
@@ -47,6 +47,8 @@ export default function Programs() {
                   <img
                     src={program.image}
                     alt={program.title}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#050D1A] via-[#050D1A]/40 to-transparent" />

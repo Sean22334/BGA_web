@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
-import { MessageCircle, X, Send, Sparkles } from 'lucide-react';
+import { MessageCircle, X, Sparkles } from 'lucide-react';
+import { useContent } from '../context/useContent';
+import { contactLinks } from '../lib/cmsContent';
 
 export default function FloatingMessenger() {
   const [open, setOpen] = useState(false);
+  const { settings } = useContent();
+  const links = contactLinks(settings);
 
   return (
     <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
@@ -14,12 +18,13 @@ export default function FloatingMessenger() {
             <div className="flex items-center gap-2.5">
               <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
               <div>
-                <h4 className="font-serif-luxury font-bold text-white text-sm">BGA Admissions Online</h4>
-                <p className="text-[11px] text-slate-400">Typically replies in a few minutes</p>
+                <h4 className="font-serif-luxury font-bold text-white text-sm">BGA Admissions</h4>
+                <p className="text-[11px] text-slate-400">Replies during admissions hours</p>
               </div>
             </div>
             <button 
               onClick={() => setOpen(false)}
+              aria-label="Close admissions help"
               className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
             >
               <X className="w-4 h-4" />
@@ -31,12 +36,12 @@ export default function FloatingMessenger() {
               <Sparkles className="w-3.5 h-3.5" /> Mabuhay! How can we help you today?
             </p>
             <p className="text-slate-400">
-              Click below to chat directly with our Admissions Counselor on Facebook Messenger for instant answers on orientation dates and course fees!
+              Chat directly with our admissions team on Facebook Messenger about orientation dates and course fees.
             </p>
           </div>
 
           <a
-            href="https://m.me"
+            href={links.messenger}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg flex items-center justify-center gap-2 transition-all"

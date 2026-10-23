@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
@@ -53,9 +53,10 @@ export default function ReservePage() {
 
   const [orientations, setOrientations] = useState([]);
   const [loadingOrientations, setLoadingOrientations] = useState(true);
-  const [selectedBranchFilter, setSelectedBranchFilter] = useState(() => normalizeBranch(searchParams.get('branch')));
+  const selectedBranchFilter = normalizeBranch(requestedBranch);
+  const [reloadCount, setReloadCount] = useState(0);
   const [scheduleNotice, setScheduleNotice] = useState('');
-  const handledDeepLinkRef = useRef(null);
+  const dialogRef = useRef(null);
 
   // Booking Modal State
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -85,48 +86,50 @@ export default function ReservePage() {
   });
 
   useEffect(() => {
-    fetchOrientations();
-    // fetchOrientations intentionally owns the request lifecycle for these URL filters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBranchFilter, requestedOrientationId, requestedBranch]);
-
-  const fetchOrientations = async () => {
+    let active = true;
     setLoadingOrientations(true);
     setScheduleNotice('');
-    try {
-      const data = await api.getPublicOrientations({
-        branch: selectedBranchFilter === 'All' ? null : selectedBranchFilter
-      });
-      setOrientations(data || []);
-
-      if (requestedOrientationId && handledDeepLinkRef.current !== requestedOrientationId) {
-        handledDeepLinkRef.current = requestedOrientationId;
-        const requestedEvent = (data || []).find((event) => String(event.id) === String(requestedOrientationId));
-        if (requestedEvent) {
-          handleOpenBookingModal(requestedEvent);
-        } else {
-          setScheduleNotice('That orientation is unavailable, full, closed, or already past. Please choose from the available schedules below.');
+    setIsModalOpen(false);
+    setSelectedEvent(null);
+    const fetchOrientations = async () => {
+      try {
+        const data = await api.getPublicOrientations({
+          branch: requestedOrientationId || selectedBranchFilter === 'All' ? null : selectedBranchFilter
+        });
+        if (!active) return;
+        setOrientations((data || []).filter((event) => selectedBranchFilter === 'All' || event.branch === selectedBranchFilter));
+        if (requestedOrientationId) {
+          const event = (data || []).find((item) => String(item.id) === requestedOrientationId);
+          if (event) {
+            setSelectedEvent(event);
+            setBookingError('');
+            setIsModalOpen(true);
+          } else {
+            setScheduleNotice('That orientation is unavailable, full, closed, or already past. Please choose from the available schedules below.');
+          }
+        } else if (requestedBranch && selectedBranchFilter === 'All' && requestedBranch.toLowerCase() !== 'all') {
+          setScheduleNotice(`"${requestedBranch}" is not a recognized BGA branch. Showing all available schedules instead.`);
         }
-      } else if (requestedBranch && normalizeBranch(requestedBranch) === 'All' && requestedBranch.toLowerCase() !== 'all') {
-        setScheduleNotice(`“${requestedBranch}” is not a recognized BGA branch. Showing all available schedules instead.`);
+      } catch (err) {
+        if (active) {
+          setOrientations([]);
+          setScheduleNotice(err.message || 'Available schedules could not be loaded. Please try again shortly.');
+        }
+      } finally {
+        if (active) setLoadingOrientations(false);
       }
-    } catch (err) {
-      console.error(err);
-      setScheduleNotice(err.message || 'Available schedules could not be loaded. Please try again shortly.');
-    } finally {
-      setLoadingOrientations(false);
-    }
-  };
+    };
+    void fetchOrientations();
+    return () => { active = false; };
+  }, [selectedBranchFilter, requestedOrientationId, requestedBranch, reloadCount]);
 
   const handleBranchFilterChange = (branch) => {
-    setSelectedBranchFilter(branch);
     setScheduleNotice('');
-    handledDeepLinkRef.current = null;
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('orientation');
     if (branch === 'All') nextParams.delete('branch');
     else nextParams.set('branch', branch);
-    setSearchParams(nextParams, { replace: true });
+    setSearchParams(nextParams);
   };
 
   const handleOpenBookingModal = (event) => {
@@ -135,11 +138,35 @@ export default function ReservePage() {
     setIsModalOpen(true);
   };
 
-  const handleCloseBookingModal = () => {
+  const handleCloseBookingModal = useCallback(() => {
     setIsModalOpen(false);
     setSelectedEvent(null);
     reset();
-  };
+  }, [reset]);
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.querySelector('input')?.focus();
+    const handleKey = (event) => {
+      if (event.key === 'Escape' && !isSubmitting) handleCloseBookingModal();
+      if (event.key !== 'Tab') return;
+      const elements = dialogRef.current?.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), a[href]');
+      if (!elements?.length) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKey);
+      previousFocus?.focus();
+    };
+  }, [isModalOpen, isSubmitting, handleCloseBookingModal]);
 
   // Form Submission
   const onSubmit = async (data) => {
@@ -162,9 +189,6 @@ export default function ReservePage() {
 
       const res = await api.submitReservation(payload);
 
-      setIsSubmitting(false);
-      handleCloseBookingModal();
-
       const generatedRef = res?.reference_number || res?.confirmation?.reference_number;
       if (!generatedRef) throw new Error('Reservation was received but no confirmation reference was returned. Please contact Admissions.');
 
@@ -181,7 +205,9 @@ export default function ReservePage() {
         submitted_at: new Date().toISOString()
       };
 
-      sessionStorage.setItem(`bga_confirmation_phone:${generatedRef}`, data.mobileNumber);
+      try { sessionStorage.setItem(`bga_confirmation_phone:${generatedRef}`, data.mobileNumber); } catch { /* Reference + phone lookup remains available if browser storage is blocked. */ }
+      setIsSubmitting(false);
+      handleCloseBookingModal();
 
       // Redirect to Success Page
       navigate(`/success?ref=${encodeURIComponent(generatedRef)}`, {
@@ -323,6 +349,7 @@ export default function ReservePage() {
                 <div className="flex items-start gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100" role="status">
                   <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
                   <span>{scheduleNotice}</span>
+                  <button type="button" onClick={() => setReloadCount((count) => count + 1)} className="underline shrink-0">Retry</button>
                 </div>
               )}
               {loadingOrientations ? (
@@ -675,6 +702,10 @@ export default function ReservePage() {
         {isModalOpen && selectedEvent && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
             <motion.div
+              ref={dialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="reservation-dialog-title"
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -686,7 +717,7 @@ export default function ReservePage() {
                   <span className="px-2.5 py-0.5 rounded bg-[#2670f2]/20 text-[#2670f2] font-bold text-[10px] uppercase">
                     {selectedEvent.branch} Branch
                   </span>
-                  <h3 className="font-serif-luxury font-bold text-xl text-white mt-1">
+                  <h3 id="reservation-dialog-title" className="font-serif-luxury font-bold text-xl text-white mt-1">
                     Complete Your Reservation
                   </h3>
                   <p className="text-xs text-slate-400">
@@ -695,6 +726,8 @@ export default function ReservePage() {
                 </div>
                 <button
                   onClick={handleCloseBookingModal}
+                  aria-label="Close reservation form"
+                  disabled={isSubmitting}
                   className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -712,11 +745,13 @@ export default function ReservePage() {
 
                 {/* Full Name */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                  <label htmlFor="reserve-fullName" className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                     Full Name *
                   </label>
                   <input
                     type="text"
+                    id="reserve-fullName"
+                    autoComplete="name"
                     {...register('fullName')}
                     placeholder="e.g. Juan Dela Cruz"
                     className="w-full px-4 py-3 rounded-xl bg-slate-950/70 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-[#2670f2] text-sm"
@@ -727,12 +762,14 @@ export default function ReservePage() {
                 {/* Mobile & Email */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                    <label htmlFor="reserve-mobileNumber" className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                       Mobile Number *
                     </label>
                     <input
                       type="tel"
-                      {...register('mobileNumber')}
+                      id="reserve-mobileNumber"
+                    autoComplete="tel"
+                    {...register('mobileNumber')}
                       placeholder="e.g. 0917 123 4567"
                       className="w-full px-4 py-3 rounded-xl bg-slate-950/70 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-[#2670f2] text-sm"
                     />
@@ -740,12 +777,14 @@ export default function ReservePage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                    <label htmlFor="reserve-email" className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                       Email Address *
                     </label>
                     <input
                       type="email"
-                      {...register('email')}
+                      id="reserve-email"
+                    autoComplete="email"
+                    {...register('email')}
                       placeholder="juan@gmail.com"
                       className="w-full px-4 py-3 rounded-xl bg-slate-950/70 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-[#2670f2] text-sm"
                     />
@@ -755,11 +794,13 @@ export default function ReservePage() {
 
                 {/* Complete Address */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                  <label htmlFor="reserve-currentAddress" className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                     Complete Street Address *
                   </label>
                   <input
                     type="text"
+                    id="reserve-currentAddress"
+                    autoComplete="street-address"
                     {...register('currentAddress')}
                     placeholder="House / Unit No., Street, Barangay"
                     className="w-full px-4 py-3 rounded-xl bg-slate-950/70 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-[#2670f2] text-sm"
@@ -770,12 +811,14 @@ export default function ReservePage() {
                 {/* City & Province */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                    <label htmlFor="reserve-city" className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                       City / Municipality *
                     </label>
                     <input
                       type="text"
-                      {...register('city')}
+                      id="reserve-city"
+                    autoComplete="address-level2"
+                    {...register('city')}
                       placeholder="e.g. Tagum City"
                       className="w-full px-4 py-3 rounded-xl bg-slate-950/70 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-[#2670f2] text-sm"
                     />
@@ -783,12 +826,14 @@ export default function ReservePage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                    <label htmlFor="reserve-province" className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                       Province *
                     </label>
                     <input
                       type="text"
-                      {...register('province')}
+                      id="reserve-province"
+                    autoComplete="address-level1"
+                    {...register('province')}
                       placeholder="e.g. Davao del Norte"
                       className="w-full px-4 py-3 rounded-xl bg-slate-950/70 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-[#2670f2] text-sm"
                     />
@@ -798,11 +843,13 @@ export default function ReservePage() {
 
                 {/* Additional Notes */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
+                  <label htmlFor="reserve-additionalNotes" className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                     Additional Notes / Inquiries (Optional)
                   </label>
                   <textarea
                     rows="2"
+                    id="reserve-additionalNotes"
+                    autoComplete="off"
                     {...register('additionalNotes')}
                     placeholder="Questions or qualifications..."
                     className="w-full px-4 py-3 rounded-xl bg-slate-950/70 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-[#2670f2] text-sm"

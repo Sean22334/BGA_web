@@ -1,13 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import {
   Users,
   Search,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Trash2,
   Building,
   Calendar,
   Loader2,
@@ -15,11 +10,10 @@ import {
   Download,
   Phone,
   Mail,
-  MapPin,
   Eye
 } from 'lucide-react';
 import { api } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import ReservationDetailsModal from '../../components/ReservationDetailsModal';
 
 export default function ReservationsList() {
@@ -41,27 +35,9 @@ export default function ReservationsList() {
   // Selected reservation modal state
   const [selectedReservationDetails, setSelectedReservationDetails] = useState(null);
 
-  useEffect(() => {
-    fetchData();
 
-    // Polling interval every 5 seconds for live real-time sync
-    const intervalId = setInterval(() => {
-      fetchData(true);
-    }, 5000);
 
-    // Event listeners for instant cross-tab & client events
-    const handleSync = () => fetchData(true);
-    window.addEventListener('bga_reservation_event', handleSync);
-    window.addEventListener('storage', handleSync);
-
-    return () => {
-      clearInterval(intervalId);
-      window.removeEventListener('bga_reservation_event', handleSync);
-      window.removeEventListener('storage', handleSync);
-    };
-  }, [token, selectedBranch, selectedStatus, selectedOrientation, search]);
-
-  const fetchData = async (isSilent = false) => {
+  const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
       const [oList, rList] = await Promise.all([
@@ -80,7 +56,27 @@ export default function ReservationsList() {
     } finally {
       if (!isSilent) setLoading(false);
     }
-  };
+  }, [token, selectedBranch, selectedStatus, selectedOrientation, search]);
+
+  useEffect(() => {
+    fetchData();
+
+    // Polling interval every 5 seconds for live real-time sync
+    const intervalId = setInterval(() => {
+      fetchData(true);
+    }, 5000);
+
+    // Event listeners for instant cross-tab & client events
+    const handleSync = () => fetchData(true);
+    window.addEventListener('bga_reservation_event', handleSync);
+    window.addEventListener('storage', handleSync);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('bga_reservation_event', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, [fetchData]);
 
   const handleStatusChange = async (id, newStatus) => {
     try {

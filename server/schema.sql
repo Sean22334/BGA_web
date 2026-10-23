@@ -60,29 +60,12 @@ CREATE TABLE IF NOT EXISTS reservations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =============================================================================
--- Initial Seed Data (fictional demo records)
--- Configure admin credentials via ADMIN_EMAIL / ADMIN_PASSWORD in .env for
--- standalone mode, or insert a bcrypt password_hash for MySQL production use.
+-- Accounts and reservations are intentionally not seeded in the schema.
+-- Configure ADMIN_EMAIL / ADMIN_PASSWORD only for development standalone mode.
+-- Provision a real bcrypt password_hash and role='admin' for MySQL administrators.
+-- To add clearly marked future schedules to a development MySQL database only,
+-- run server/seed-development.sql separately after this schema.
 -- =============================================================================
-
-INSERT INTO admins (email, password_hash, name)
-VALUES
-('admin@example.com', '$2a$10$e8wzYx2kH2N8eU3W6q.K6.jJv0tZ2QvM1Yt4r3X2w1v0u', 'BGA Admissions Officer')
-ON DUPLICATE KEY UPDATE name=VALUES(name);
-
-INSERT INTO orientations (id, title, branch, venue, description, date, start_time, end_time, capacity, reserved, status)
-VALUES
-(1, 'FREE Saturday Cruise Career Orientation', 'Tagum', 'Bluechef Main Training Center, Tagum City', 'Comprehensive orientation covering cruise ship career pathways, STCW requirements, and POEA agency placement.', '2026-08-01', '09:00 AM', '12:00 PM', 60, 42, 'Open'),
-(2, 'FREE Saturday Cruise Career Orientation', 'Butuan', 'BGA Butuan Culinary Lab, JC Aquino Ave', 'Learn how to start a high-paying career on international cruise ships with TESDA & USPH accredited training.', '2026-08-01', '01:30 PM', '04:30 PM', 50, 48, 'Open'),
-(3, 'FREE Saturday Cruise Career Orientation', 'Pagadian', 'BGA Pagadian Training Hall, Rizal Ave', 'Exclusive guidance session for aspiring seafarers, F&B stewards, and shipboard chefs.', '2026-08-08', '09:00 AM', '12:00 PM', 40, 40, 'Fully Booked'),
-(4, 'FREE Saturday Cruise Career Orientation', 'Bacolod', 'BGA Bacolod Campus, Lacson St.', 'Free orientation session on cruise ship culinary and hospitality certifications.', '2026-08-08', '01:30 PM', '04:30 PM', 45, 12, 'Open')
-ON DUPLICATE KEY UPDATE title=VALUES(title);
-
-INSERT INTO reservations (orientation_id, reference_number, full_name, phone, email, address, city, province, notes, status)
-VALUES
-(1, 'BGA-2026-8492', 'Alex Rivera', '09170000001', 'alex.rivera@example.com', '123 Sample Street', 'Tagum City', 'Davao del Norte', 'Interested in Culinary Arts course', 'Confirmed'),
-(1, 'BGA-2026-7310', 'Jane Doe', '09170000002', 'jane.doe@example.com', '456 Demo Avenue', 'Panabo City', 'Davao del Norte', 'Wants morning session evaluation', 'Pending'),
-(2, 'BGA-2026-4198', 'John Smith', '09170000003', 'john.smith@example.com', '789 Test Boulevard', 'Butuan City', 'Agusan del Norte', 'Prior F&B experience in local resort', 'Confirmed');
 
 -- =============================================================================
 -- CMS Tables DDL
@@ -189,4 +172,3 @@ CREATE TABLE IF NOT EXISTS cms_partners (
     display_order INT DEFAULT 0,
     is_published TINYINT(1) DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-

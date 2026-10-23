@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Info, Trash2, X, Check, Loader2 } from 'lucide-react';
+import { Info, Trash2, X, Loader2 } from 'lucide-react';
 
 export default function ConfirmModal({
   isOpen,

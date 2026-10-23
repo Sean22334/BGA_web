@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, X, Maximize2 } from 'lucide-react';
-import { useContent } from '../context/ContentContext';
+import { useContent } from '../context/useContent';
 
 export default function Gallery() {
   const { gallery } = useContent();
@@ -69,6 +69,8 @@ export default function Gallery() {
                 <img 
                   src={item.image} 
                   alt={item.title} 
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                 />
                 

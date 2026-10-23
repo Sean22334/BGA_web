@@ -29,6 +29,11 @@ dist-ssr
 
 # Test / coverage
 coverage
+playwright-report
+test-results
+
+# Local CMS upload used only for testing
+public/uploads/bga_gargantua-black-3840x2160-9621jpg_1792721812542.jpeg
 
 # Editor directories and files
 .vscode/*

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Calendar, MapPin, Building, Clock, Users, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { X, Calendar, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import { api } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 
 export default function OrientationFormModal({ isOpen, onClose, eventToEdit, onSaved }) {
   const { token } = useAuth();

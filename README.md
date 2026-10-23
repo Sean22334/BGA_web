@@ -28,7 +28,7 @@ Official landing page and admissions portal for **Bluechef Global Academy (BGA)*
 
 ## Prerequisites
 
-- **Node.js** 18 or later
+- **Node.js** 22.12 or later (CI uses Node 22)
 - **npm** 9 or later
 - **MySQL 8** (optional — the app runs in standalone fallback mode without it)
 
@@ -66,6 +66,8 @@ Official landing page and admissions portal for **Bluechef Global Academy (BGA)*
 
    Then configure `DB_HOST`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME` in `.env`.
 
+   Before using the MySQL admin login, create an administrator with a bcrypt hash generated at cost 12 or higher in `admins.password_hash`. The schema does not seed an administrator, and the API does not accept plaintext MySQL passwords.
+
 ## Environment Variables
 
 | Variable | Required | Description |
@@ -81,6 +83,9 @@ Official landing page and admissions portal for **Bluechef Global Academy (BGA)*
 | `DB_PASSWORD` | MySQL mode | MySQL password |
 | `DB_NAME` | MySQL mode | Database name (default: `bga_admissions_db`) |
 | `VITE_API_URL` | No | Frontend API base URL (default: `/api`) |
+| `VITE_SUPABASE_URL` | Production | Active Supabase project URL for reservations, authentication, and CMS |
+| `VITE_SUPABASE_ANON_KEY` | Production | Public anon/publishable key for the same Supabase project; never use a service-role key |
+| `VITE_ENABLE_ADMIN` | Production admin portal | Set to `true` at build time to expose the protected admin routes |
 
 > **Never commit `.env` files.** Only `.env.example` with placeholder values belongs in the repository.
 
@@ -119,13 +124,28 @@ Branch filters remain in the URL so the links can be shared through Facebook, Me
 
 ## Supabase Reservation Migration
 
-Before deploying the direct reservation flow, apply:
+Before deploying the direct reservation flow, apply these migrations in order:
 
 ```text
 supabase/migrations/202608270001_direct_reservation_flow.sql
+supabase/migrations/202608310001_harden_admin_authorization.sql
+supabase/migrations/202609140001_booking_integrity.sql
+supabase/migrations/202610230001_complete_cms_collections.sql
 ```
 
-The migration replaces legacy orientation/reservation policies, enables RLS, and installs the atomic booking, safe confirmation lookup, and admin status-change RPCs. Production intentionally does not fall back to browser-local reservations when Supabase is unavailable.
+The migrations replace legacy policies, enable RLS, install the atomic booking and confirmation RPCs, and restrict admin operations to an explicit `admin_users` allowlist. Production intentionally does not fall back to browser-local or in-memory writes when the persistent service is unavailable.
+
+After creating the administrator in Supabase Authentication, provision that user once from the Supabase SQL editor:
+
+```sql
+insert into public.admin_users (user_id)
+select id
+from auth.users
+where lower(email) = lower('your-admin@example.com')
+on conflict (user_id) do nothing;
+```
+
+An authenticated Supabase account that is not in `admin_users` cannot enter the admin portal or manage orientation, reservation, CMS, or CMS media records.
 
 ## Build
 
@@ -142,6 +162,8 @@ npm run preview
 ```
 
 The output is written to the `dist/` directory.
+
+`npm run build` always uses `NODE_ENV=production`, even when the local `.env` is configured for the development demo. Vercel uses this same command. See [the deployment handoff](docs/DEPLOYMENT.md) for verified checks, remaining production prerequisites, and user-run Git commands.
 
 ## Folder Structure
 
@@ -169,7 +191,8 @@ BGA_landing_page/
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | POST | `/api/auth/login` | No | Admin login |
-| GET | `/api/orientations` | No | List orientations |
+| GET | `/api/orientations` | Admin | List all orientations |
+| GET | `/api/orientations/public` | No | List bookable orientations |
 | POST | `/api/orientations` | Admin | Create orientation |
 | PUT | `/api/orientations/:id` | Admin | Update orientation |
 | PATCH | `/api/orientations/:id/status` | Admin | Change status |
@@ -193,8 +216,12 @@ BGA_landing_page/
 
 - Set a strong, unique `JWT_SECRET` before deploying to production.
 - Replace default admin credentials in `.env` before going live.
-- Implement bcrypt password hashing for MySQL admin accounts in production.
-- The in-memory fallback mode is intended for local development only.
+- MySQL admin passwords must be stored as bcrypt hashes in `admins.password_hash`; plaintext passwords are never accepted by the MySQL login endpoint.
+- The in-memory fallback mode is development-only. With `NODE_ENV=production`, the Express API returns `503` instead of reading or writing temporary data when MySQL is unavailable.
+
+## Verification and rollout
+
+See [the rollout checklist](docs/ROLLOUT.md) for migration prerequisites, isolated demo mode, automated tests, and outstanding live verification. A configured Supabase client never silently switches reservation storage after an error, including in development. There are no browser-local reservation writes.
 
 ## License
 

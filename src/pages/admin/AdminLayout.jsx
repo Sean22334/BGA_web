@@ -12,15 +12,15 @@ import {
   Sparkles,
   Globe
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 
 export default function AdminLayout() {
   const { admin, logoutAdmin } = useAuth();
   const navigate = useNavigate();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  const handleLogout = () => {
-    logoutAdmin();
+  const handleLogout = async () => {
+    await logoutAdmin();
     navigate('/admin/login');
   };
 

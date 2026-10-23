@@ -5,14 +5,18 @@ import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
-import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { createDevelopmentData } from '../shared/developmentData.js';
+import { isBookableOrientation, normalizePhone, todayInManila } from '../shared/reservationRules.js';
+import { bookMySql, changeMySqlReservationStatus, newReference, ORIENTATION_STATUSES, passwordMatches, ReservationError, seatChange, updateMySqlOrientation, validateApplicant, validateOrientation } from './reservationDomain.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const USE_DEVELOPMENT_MEMORY = !IS_PRODUCTION && process.env.BGA_DEV_MEMORY === 'true';
 
 if (!process.env.JWT_SECRET) {
   console.error('❌ JWT_SECRET is not set. Copy .env.example to .env and configure your environment.');
@@ -42,9 +46,11 @@ app.use(express.static(path.join(__dirname, '../public')));
 // MySQL Pool setup
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
+  port: Number(process.env.DB_PORT) || 3306,
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'bga_admissions_db',
+  dateStrings: true,
   waitForConnections: true,
   connectionLimit: 10
 };
@@ -53,110 +59,12 @@ let pool = null;
 let isDbConnected = false;
 
 // Local In-Memory Fallback Store if MySQL is offline
-let mockAdmins =
+const mockAdmins =
   DEV_ADMIN_EMAIL && DEV_ADMIN_PASSWORD
     ? [{ id: 1, email: DEV_ADMIN_EMAIL, password: DEV_ADMIN_PASSWORD, name: 'BGA Admissions Officer' }]
     : [];
 
-let mockOrientations = [
-  {
-    id: 1,
-    title: 'FREE Saturday Cruise Career Orientation',
-    branch: 'Tagum',
-    venue: 'Bluechef Main Training Center, Tagum City',
-    description: 'Comprehensive orientation covering cruise ship career pathways, STCW requirements, and POEA agency placement.',
-    date: '2026-08-01',
-    start_time: '09:00 AM',
-    end_time: '12:00 PM',
-    capacity: 60,
-    reserved: 42,
-    status: 'Open'
-  },
-  {
-    id: 2,
-    title: 'FREE Saturday Cruise Career Orientation',
-    branch: 'Butuan',
-    venue: 'BGA Butuan Culinary Lab, JC Aquino Ave',
-    description: 'Learn how to start a high-paying career on international cruise ships with TESDA & USPH accredited training.',
-    date: '2026-08-01',
-    start_time: '01:30 PM',
-    end_time: '04:30 PM',
-    capacity: 50,
-    reserved: 48,
-    status: 'Open'
-  },
-  {
-    id: 3,
-    title: 'FREE Saturday Cruise Career Orientation',
-    branch: 'Pagadian',
-    venue: 'BGA Pagadian Training Hall, Rizal Ave',
-    description: 'Exclusive guidance session for aspiring seafarers, F&B stewards, and shipboard chefs.',
-    date: '2026-08-08',
-    start_time: '09:00 AM',
-    end_time: '12:00 PM',
-    capacity: 40,
-    reserved: 40,
-    status: 'Fully Booked'
-  },
-  {
-    id: 4,
-    title: 'FREE Saturday Cruise Career Orientation',
-    branch: 'Bacolod',
-    venue: 'BGA Bacolod Campus, Lacson St.',
-    description: 'Free orientation session on cruise ship culinary and hospitality certifications.',
-    date: '2026-08-08',
-    start_time: '01:30 PM',
-    end_time: '04:30 PM',
-    capacity: 45,
-    reserved: 12,
-    status: 'Open'
-  }
-];
-
-let mockReservations = [
-  {
-    id: 1,
-    orientation_id: 1,
-    reference_number: 'BGA-2026-8492',
-    full_name: 'Alex Rivera',
-    phone: '09170000001',
-    email: 'alex.rivera@example.com',
-    address: '123 Sample Street',
-    city: 'Tagum City',
-    province: 'Davao del Norte',
-    notes: 'Interested in Culinary Arts course',
-    status: 'Confirmed',
-    created_at: '2026-07-27 10:00:00'
-  },
-  {
-    id: 2,
-    orientation_id: 1,
-    reference_number: 'BGA-2026-7310',
-    full_name: 'Jane Doe',
-    phone: '09170000002',
-    email: 'jane.doe@example.com',
-    address: '456 Demo Avenue',
-    city: 'Panabo City',
-    province: 'Davao del Norte',
-    notes: 'Wants morning session evaluation',
-    status: 'Pending',
-    created_at: '2026-07-27 10:30:00'
-  },
-  {
-    id: 3,
-    orientation_id: 2,
-    reference_number: 'BGA-2026-4198',
-    full_name: 'John Smith',
-    phone: '09170000003',
-    email: 'john.smith@example.com',
-    address: '789 Test Boulevard',
-    city: 'Butuan City',
-    province: 'Agusan del Norte',
-    notes: 'Prior F&B experience in local resort',
-    status: 'Confirmed',
-    created_at: '2026-07-27 11:00:00'
-  }
-];
+let { orientations: mockOrientations, reservations: mockReservations } = createDevelopmentData();
 
 // CMS Standalone Mock Dataset
 let mockSiteSettings = {
@@ -409,6 +317,7 @@ let mockCmsPartners = [
 ];
 
 async function initDb() {
+  if (USE_DEVELOPMENT_MEMORY) return;
   try {
     pool = mysql.createPool(dbConfig);
     const conn = await pool.getConnection();
@@ -416,16 +325,31 @@ async function initDb() {
     conn.release();
     isDbConnected = true;
     console.log('✅ Connected to MySQL database [bga_admissions_db]');
-  } catch (err) {
+  } catch {
     isDbConnected = false;
-    console.log('⚠️ MySQL connection not available. Running in Standalone Store Mode.');
+    console.log(IS_PRODUCTION
+      ? 'MySQL unavailable; production requests will return a retryable service error.'
+      : 'MySQL unavailable; using the development in-memory store.');
   }
 }
-initDb();
+await initDb();
 
-function normalizePhone(value = '') {
-  return String(value).replace(/\D/g, '');
-}
+app.get('/api/health', (_req, res) => {
+  res.status(isDbConnected || !IS_PRODUCTION ? 200 : 503).json({
+    status: isDbConnected ? 'ok' : IS_PRODUCTION ? 'unavailable' : 'development-fallback',
+    persistentStore: isDbConnected ? 'mysql' : null
+  });
+});
+
+// Never report successful production writes against the temporary in-memory store.
+app.use('/api', (_req, res, next) => {
+  if (IS_PRODUCTION && !isDbConnected) {
+    return res.status(503).json({
+      error: 'The admissions service is temporarily unavailable. Please retry shortly.'
+    });
+  }
+  return next();
+});
 
 function toConfirmation(reservation, orientation) {
   return {
@@ -443,7 +367,7 @@ function toConfirmation(reservation, orientation) {
 }
 
 // Authentication Middleware
-function verifyAdminToken(req, res, next) {
+async function verifyAdminToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -452,10 +376,14 @@ function verifyAdminToken(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.admin = decoded;
-    next();
-  } catch (err) {
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    const admin = isDbConnected
+      ? (await pool.query('SELECT id, email, name FROM admins WHERE id = ? AND role = ?', [decoded.id, 'admin']))[0][0]
+      : mockAdmins.find((item) => item.id === decoded.id);
+    if (!admin) return res.status(403).json({ error: 'Invalid or expired token.' });
+    req.admin = { id: admin.id, email: admin.email, name: admin.name };
+    return next();
+  } catch {
     return res.status(403).json({ error: 'Invalid or expired token.' });
   }
 }
@@ -466,18 +394,24 @@ function verifyAdminToken(req, res, next) {
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
 
-  if (!email || !password) {
+  if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password || email.length > 255 || password.length > 1024) {
     return res.status(400).json({ error: 'Email and password are required.' });
   }
 
   if (isDbConnected) {
     try {
-      const [rows] = await pool.query('SELECT * FROM admins WHERE email = ?', [email]);
-      if (rows.length === 0) {
+      const [rows] = await pool.query(
+        "SELECT id, email, name, password_hash FROM admins WHERE LOWER(email) = LOWER(?) AND role = 'admin' LIMIT 1",
+        [email.trim()]
+      );
+      const admin = rows[0];
+      const passwordIsValid = admin
+        ? await passwordMatches(password, admin.password_hash)
+        : false;
+
+      if (!admin || !passwordIsValid) {
         return res.status(401).json({ error: 'Invalid email or password.' });
       }
-      const admin = rows[0];
-      // Note: In production, compare with bcrypt.hash
       const token = jwt.sign({ id: admin.id, email: admin.email, name: admin.name }, JWT_SECRET, { expiresIn: '12h' });
       return res.json({ token, admin: { id: admin.id, email: admin.email, name: admin.name } });
     } catch (err) {
@@ -485,7 +419,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(500).json({ error: 'Database authentication error.' });
     }
   } else {
-    const admin = mockAdmins.find((a) => a.email === email && a.password === password);
+    const admin = mockAdmins.find((a) => a.email.toLowerCase() === email.trim().toLowerCase() && a.password === password);
     if (!admin) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
@@ -494,12 +428,14 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+app.get('/api/auth/me', verifyAdminToken, (req, res) => res.json({ admin: req.admin }));
+
 // -----------------------------------------------------------------------------
 // 2. ORIENTATION ENDPOINTS
 // -----------------------------------------------------------------------------
 
-// Get All Orientations (Public & Admin list with filters)
-app.get('/api/orientations', async (req, res) => {
+// Complete schedules include drafts and are available only to admins.
+app.get('/api/orientations', verifyAdminToken, async (req, res) => {
   const { branch, status, search } = req.query;
 
   if (isDbConnected) {
@@ -557,10 +493,10 @@ app.get('/api/orientations/public', async (req, res) => {
         SELECT *, (capacity - reserved) AS remaining_slots
         FROM orientations
         WHERE status IN ('Open', 'Published')
-          AND date >= CURDATE()
+          AND date >= ?
           AND reserved < capacity
       `;
-      const params = [];
+      const params = [todayInManila()];
       if (branch) {
         query += ' AND branch = ?';
         params.push(branch);
@@ -571,17 +507,15 @@ app.get('/api/orientations/public', async (req, res) => {
       }
       query += ' ORDER BY date ASC, start_time ASC';
       const [rows] = await pool.query(query, params);
-      return res.json(rows);
+      return res.json(rows.filter((item) => isBookableOrientation(item)));
     } catch (err) {
       console.error(err);
       return res.status(500).json({ error: 'Failed to fetch available orientations.' });
     }
   }
 
-  const today = new Date().toISOString().split('T')[0];
   const result = mockOrientations
-    .filter((item) => ['Open', 'Published'].includes(item.status))
-    .filter((item) => item.date >= today && item.reserved < item.capacity)
+    .filter((item) => isBookableOrientation(item))
     .filter((item) => !branch || item.branch.toLowerCase() === branch.toLowerCase())
     .filter((item) => !orientation_id || String(item.id) === String(orientation_id))
     .map((item) => ({ ...item, remaining_slots: item.capacity - item.reserved }));
@@ -597,6 +531,11 @@ app.post('/api/orientations', verifyAdminToken, async (req, res) => {
   }
 
   const initialStatus = status || 'Published';
+  try {
+    validateOrientation({ ...req.body, start_time: start_time || '09:00 AM', status: initialStatus });
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
 
   if (isDbConnected) {
     try {
@@ -632,16 +571,12 @@ app.post('/api/orientations', verifyAdminToken, async (req, res) => {
 // Update Orientation Event (Admin Only)
 app.put('/api/orientations/:id', verifyAdminToken, async (req, res) => {
   const { id } = req.params;
-  const { title, branch, venue, description, date, start_time, end_time, capacity, status } = req.body;
 
   if (isDbConnected) {
     try {
-      await pool.query(
-        'UPDATE orientations SET title=?, branch=?, venue=?, description=?, date=?, start_time=?, end_time=?, capacity=?, status=? WHERE id=?',
-        [title, branch, venue, description, date, start_time, end_time, capacity, status, id]
-      );
-      return res.json({ message: 'Orientation updated successfully' });
+      return res.json(await updateMySqlOrientation(pool, id, req.body));
     } catch (err) {
+      if (err instanceof ReservationError) return res.status(err.status).json({ error: err.message });
       console.error(err);
       return res.status(500).json({ error: 'Failed to update orientation.' });
     }
@@ -649,18 +584,11 @@ app.put('/api/orientations/:id', verifyAdminToken, async (req, res) => {
     const idx = mockOrientations.findIndex((o) => o.id === parseInt(id));
     if (idx === -1) return res.status(404).json({ error: 'Orientation not found.' });
 
-    mockOrientations[idx] = {
-      ...mockOrientations[idx],
-      title: title !== undefined ? title : mockOrientations[idx].title,
-      branch: branch !== undefined ? branch : mockOrientations[idx].branch,
-      venue: venue !== undefined ? venue : mockOrientations[idx].venue,
-      description: description !== undefined ? description : mockOrientations[idx].description,
-      date: date !== undefined ? date : mockOrientations[idx].date,
-      start_time: start_time !== undefined ? start_time : mockOrientations[idx].start_time,
-      end_time: end_time !== undefined ? end_time : mockOrientations[idx].end_time,
-      capacity: capacity !== undefined ? parseInt(capacity) : mockOrientations[idx].capacity,
-      status: status !== undefined ? status : mockOrientations[idx].status
-    };
+    try {
+      mockOrientations[idx] = validateOrientation(req.body, mockOrientations[idx]);
+    } catch (error) {
+      return res.status(error.status || 400).json({ error: error.message });
+    }
     return res.json({ message: 'Orientation updated successfully', orientation: mockOrientations[idx] });
   }
 });
@@ -670,20 +598,20 @@ app.patch('/api/orientations/:id/status', verifyAdminToken, async (req, res) => 
   const { id } = req.params;
   const { status } = req.body;
 
-  if (!status) return res.status(400).json({ error: 'Status is required.' });
+  if (!ORIENTATION_STATUSES.includes(status)) return res.status(400).json({ error: 'A valid orientation status is required.' });
 
   if (isDbConnected) {
     try {
-      await pool.query('UPDATE orientations SET status = ? WHERE id = ?', [status, id]);
-      return res.json({ message: `Orientation status changed to ${status}` });
+      return res.json(await updateMySqlOrientation(pool, id, { status }));
     } catch (err) {
+      if (err instanceof ReservationError) return res.status(err.status).json({ error: err.message });
       console.error(err);
       return res.status(500).json({ error: 'Database error updating status.' });
     }
   } else {
     const orientation = mockOrientations.find((o) => o.id === parseInt(id));
     if (!orientation) return res.status(404).json({ error: 'Orientation not found.' });
-    orientation.status = status;
+    orientation.status = ['Open', 'Published'].includes(status) && orientation.reserved >= orientation.capacity ? 'Fully Booked' : status;
     return res.json({ message: `Orientation status changed to ${status}`, orientation });
   }
 });
@@ -747,84 +675,22 @@ app.delete('/api/orientations/:id', verifyAdminToken, async (req, res) => {
 
 // Submit Public Reservation (Automatic Slot Computation & Capacity Check)
 app.post('/api/reservations', async (req, res) => {
-  const { orientation_id, full_name, phone, email, address, city, province, notes } = req.body;
-
-  if (!orientation_id || !full_name || !phone || !email || !address || !city || !province) {
-    return res.status(400).json({ error: 'All required applicant fields must be provided.' });
+  let applicant;
+  try {
+    applicant = validateApplicant(req.body || {});
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
   }
-
-  // High-entropy, human-readable reference number.
-  const refNumber = `BGA-${new Date().getFullYear()}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
+  const { orientation_id, full_name, phone, email, address, city, province, notes } = applicant;
+  const refNumber = newReference();
 
   if (isDbConnected) {
-    const conn = await pool.getConnection();
     try {
-      await conn.beginTransaction();
-
-      // Check capacity
-      const [rows] = await conn.query('SELECT * FROM orientations WHERE id = ? FOR UPDATE', [orientation_id]);
-      if (rows.length === 0) {
-        await conn.rollback();
-        conn.release();
-        return res.status(404).json({ error: 'Selected orientation event not found.' });
-      }
-
-      const orientation = rows[0];
-      const remaining = orientation.capacity - orientation.reserved;
-
-      if (remaining <= 0 || orientation.status === 'Fully Booked' || orientation.status === 'Closed') {
-        await conn.rollback();
-        conn.release();
-        return res.status(400).json({ error: 'Sorry! This orientation session is FULLY BOOKED or closed.' });
-      }
-
-      // Check for duplicate reservation by email or phone for this orientation event
-      const [existing] = await conn.query(
-        'SELECT id FROM reservations WHERE (email = ? OR phone = ?) AND orientation_id = ? AND status != "Cancelled"',
-        [email, phone, orientation_id]
-      );
-
-      if (existing.length > 0) {
-        await conn.rollback();
-        conn.release();
-        return res.status(400).json({
-          error: 'You have already submitted a reservation for this orientation session using this email or phone number.'
-        });
-      }
-
-      // Insert reservation
-      const [resResult] = await conn.query(
-        'INSERT INTO reservations (orientation_id, reference_number, full_name, phone, email, address, city, province, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [orientation_id, refNumber, full_name, phone, email, address, city, province, notes || '', 'Pending']
-      );
-
-      // Increment reserved count & auto-update status if full
-      const newReserved = orientation.reserved + 1;
-      const newStatus = newReserved >= orientation.capacity ? 'Fully Booked' : orientation.status;
-
-      await conn.query('UPDATE orientations SET reserved = ?, status = ? WHERE id = ?', [newReserved, newStatus, orientation_id]);
-
-      await conn.commit();
-      conn.release();
-
-      return res.status(201).json({
-        message: 'Reservation submitted successfully',
-        reference_number: refNumber,
-        reservation_id: resResult.insertId,
-        orientation: {
-          id: orientation.id,
-          title: orientation.title,
-          branch: orientation.branch,
-          venue: orientation.venue,
-          date: orientation.date,
-          start_time: orientation.start_time
-        }
-      });
+      return res.status(201).json(await bookMySql(pool, applicant));
     } catch (err) {
-      await conn.rollback();
-      conn.release();
+      if (err instanceof ReservationError) return res.status(err.status).json({ error: err.message });
       console.error(err);
-      return res.status(500).json({ error: 'Database transaction failed.' });
+      return res.status(503).json({ error: 'The reservation service is temporarily unavailable. Please try again shortly.' });
     }
   } else {
     const orientation = mockOrientations.find((o) => o.id === parseInt(orientation_id));
@@ -832,21 +698,20 @@ app.post('/api/reservations', async (req, res) => {
       return res.status(404).json({ error: 'Selected orientation event not found.' });
     }
 
-    const remaining = orientation.capacity - orientation.reserved;
-    if (remaining <= 0 || orientation.status === 'Fully Booked' || orientation.status === 'Closed') {
-      return res.status(400).json({ error: 'Sorry! This orientation session is FULLY BOOKED or closed.' });
+    if (!isBookableOrientation(orientation)) {
+      return res.status(409).json({ error: 'Selected orientation event is no longer available.' });
     }
 
     // Duplicate check for fallback store
     const existingDuplicate = mockReservations.find(
       (r) =>
-        (r.email.toLowerCase() === email.toLowerCase() || r.phone === phone) &&
+        (r.email.toLowerCase() === email.trim().toLowerCase() || normalizePhone(r.phone) === normalizePhone(phone)) &&
         r.orientation_id === parseInt(orientation_id) &&
         r.status !== 'Cancelled'
     );
 
     if (existingDuplicate) {
-      return res.status(400).json({
+      return res.status(409).json({
         error: 'You have already submitted a reservation for this orientation session using this email or phone number.'
       });
     }
@@ -893,7 +758,8 @@ app.post('/api/reservations', async (req, res) => {
 // Safe confirmation recovery: both reference number and phone must match.
 app.post('/api/reservations/confirmation', async (req, res) => {
   const { reference_number, phone } = req.body;
-  if (!reference_number || !phone) {
+  res.set('Cache-Control', 'no-store');
+  if (typeof reference_number !== 'string' || !reference_number.trim() || reference_number.length > 50 || typeof phone !== 'string' || !/^\d{10,15}$/.test(normalizePhone(phone))) {
     return res.status(400).json({ error: 'Reference number and phone are required.' });
   }
 
@@ -983,7 +849,7 @@ app.get('/api/reservations', verifyAdminToken, async (req, res) => {
         orientation_title: o.title || 'Career Orientation',
         orientation_branch: o.branch || 'Tagum',
         orientation_venue: o.venue || 'BGA Training Center',
-        orientation_date: o.date || '2026-08-01',
+        orientation_date: o.date || null,
         orientation_time: o.start_time || '09:00 AM'
       };
     });
@@ -1021,55 +887,33 @@ app.patch('/api/reservations/:id/status', verifyAdminToken, async (req, res) => 
   }
 
   if (isDbConnected) {
-    const conn = await pool.getConnection();
     try {
-      await conn.beginTransaction();
-
-      const [rRows] = await conn.query('SELECT * FROM reservations WHERE id = ? FOR UPDATE', [id]);
-      if (rRows.length === 0) {
-        await conn.rollback();
-        conn.release();
-        return res.status(404).json({ error: 'Reservation not found.' });
-      }
-
-      const prevRes = rRows[0];
-      const prevStatus = prevRes.status;
-
-      await conn.query('UPDATE reservations SET status = ? WHERE id = ?', [status, id]);
-
-      // Handle capacity adjustment if cancelled
-      if (prevStatus !== 'Cancelled' && status === 'Cancelled') {
-        await conn.query('UPDATE orientations SET reserved = GREATEST(0, reserved - 1), status = IF(status = "Fully Booked", "Open", status) WHERE id = ?', [prevRes.orientation_id]);
-      } else if (prevStatus === 'Cancelled' && status !== 'Cancelled') {
-        await conn.query('UPDATE orientations SET reserved = reserved + 1 WHERE id = ?', [prevRes.orientation_id]);
-      }
-
-      await conn.commit();
-      conn.release();
-      return res.json({ message: `Reservation status updated to ${status}` });
+      return res.json(await changeMySqlReservationStatus(pool, id, status));
     } catch (err) {
-      await conn.rollback();
-      conn.release();
+      if (err instanceof ReservationError) return res.status(err.status).json({ error: err.message });
       console.error(err);
-      return res.status(500).json({ error: 'Failed to update reservation status.' });
+      return res.status(503).json({ error: 'The reservation service is temporarily unavailable. Please try again shortly.' });
     }
   } else {
     const reservation = mockReservations.find((r) => r.id === parseInt(id));
     if (!reservation) return res.status(404).json({ error: 'Reservation not found.' });
 
     const prevStatus = reservation.status;
-    reservation.status = status;
 
     const orientation = mockOrientations.find((o) => o.id === reservation.orientation_id);
-    if (orientation) {
-      if (prevStatus !== 'Cancelled' && status === 'Cancelled') {
-        orientation.reserved = Math.max(0, orientation.reserved - 1);
-        if (orientation.status === 'Fully Booked') orientation.status = 'Open';
-      } else if (prevStatus === 'Cancelled' && status !== 'Cancelled') {
-        orientation.reserved += 1;
-        if (orientation.reserved >= orientation.capacity) orientation.status = 'Fully Booked';
-      }
+    if (!orientation) return res.status(404).json({ error: 'Orientation not found.' });
+    if (prevStatus === 'Cancelled' && status !== 'Cancelled' && mockReservations.some((item) => item.id !== reservation.id
+      && item.orientation_id === reservation.orientation_id && item.status !== 'Cancelled'
+      && (item.email.trim().toLowerCase() === reservation.email.trim().toLowerCase() || normalizePhone(item.phone) === normalizePhone(reservation.phone)))) {
+      return res.status(409).json({ error: 'You have already submitted a reservation for this orientation session using this email or phone number.' });
     }
+    try {
+      Object.assign(orientation, seatChange(orientation, prevStatus, status));
+    } catch (error) {
+      return res.status(error.status || 400).json({ error: error.message });
+    }
+
+    reservation.status = status;
 
     return res.json({ message: `Reservation status updated to ${status}`, reservation });
   }
@@ -1594,6 +1438,6 @@ app.delete('/api/admin/branches/:id', verifyAdminToken, async (req, res) => {
 });
 
 // Start Express Listener
-app.listen(PORT, () => {
-  console.log(`🚀 Bluechef Global Academy Express REST Server running on port ${PORT}`);
+const listener = app.listen(PORT, () => {
+  console.log(`Bluechef Global Academy Express REST Server running on port ${listener.address().port}`);
 });
