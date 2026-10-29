@@ -20,7 +20,7 @@ export function createDevelopmentData(now = new Date()) {
   }));
   const reservations = [
     { id: 1, orientation_id: 1, full_name: 'Alex Rivera', status: 'Confirmed' },
-    { id: 2, orientation_id: 1, full_name: 'Jane Doe', status: 'Pending' },
+    { id: 2, orientation_id: 1, full_name: 'Jane Doe', status: 'Confirmed' },
     { id: 3, orientation_id: 2, full_name: 'John Smith', status: 'Confirmed' },
     { id: 4, orientation_id: 3, full_name: 'Sam Demo', status: 'Confirmed' }
   ].map((item) => ({

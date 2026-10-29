@@ -17,6 +17,22 @@ function mockClient(result) {
   return { from: () => query, rpc: () => Promise.resolve(result) };
 }
 
+test('orientation payloads preserve explicit unlimited capacity and omitted partial updates', async () => {
+  const writes = [];
+  const query = new Proxy({}, { get(_target, key) {
+    if (key === 'then') return (resolve) => resolve({ data: { id: 1, capacity: null, reserved: 7 }, error: null });
+    return (...args) => { if (key === 'insert' || key === 'update') writes.push(args[0]); return query; };
+  } });
+  const api = createApi({ supabase: { from: () => query } });
+  const created = await api.createOrientation({ capacity: null });
+  assert.equal(created.orientation.capacity, null);
+  assert.equal(writes[0][0].capacity, null);
+  await api.updateOrientation(1, { title: 'Renamed' });
+  assert.equal('capacity' in writes[1], false);
+  await api.updateOrientation(1, { capacity: '50' });
+  assert.equal(writes[2].capacity, 50);
+});
+
 test('every production operation fails closed when Supabase is absent', async () => {
   let networkCalls = 0;
   const api = createApi({ fetchImpl: () => { networkCalls++; throw new Error('Unexpected fallback'); } });

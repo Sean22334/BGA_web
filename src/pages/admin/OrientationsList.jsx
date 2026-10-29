@@ -1,3 +1,4 @@
+import { remainingSlots } from '../../../shared/reservationRules.js';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -257,7 +258,7 @@ export default function OrientationsList() {
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-medium">
                 {orientations.map((event) => {
-                  const remaining = Math.max(0, event.capacity - event.reserved);
+                  const remaining = remainingSlots(event);
                   const isFull = remaining === 0 || event.status === 'Fully Booked';
 
                   return (
@@ -279,13 +280,13 @@ export default function OrientationsList() {
                       </td>
 
                       <td className="py-4 px-4">
-                        <div className="text-white font-bold">{event.reserved} / {event.capacity}</div>
+                        <div className="text-white font-bold">{event.reserved} / {event.capacity === null ? 'Unlimited' : event.capacity}</div>
                         <div className="text-[10px] text-slate-400">Seats Reserved</div>
                       </td>
 
                       <td className="py-4 px-4">
                         <span className={`font-extrabold text-sm ${isFull ? 'text-red-400' : 'text-[#2670f2]'}`}>
-                          {remaining} slots
+                          {remaining === null ? 'Unlimited slots' : `${remaining === null ? 'Unlimited slots' : `${remaining} slots`}`}
                         </span>
                       </td>
 

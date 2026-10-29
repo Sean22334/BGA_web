@@ -74,3 +74,17 @@ test('references contain 80 random bits and remain distinct across repeated subm
   assert.equal(new Set(values).size, values.length);
   assert.match(values[0], /^BGA-\d{4}-[A-F0-9]{20}$/);
 });
+
+test('unlimited capacity preserves counting, cutoff and publication rules', () => {
+  const event = { ...createDevelopmentData().orientations[0], capacity: null, reserved: 1000001 };
+  assert.equal(isBookableOrientation(event), true);
+  assert.equal(isBookableOrientation({ ...event, status: 'Closed' }), false);
+  assert.equal(isBookableOrientation({ ...event, date: '2000-01-01' }), false);
+  assert.deepEqual(seatChange(event, 'Cancelled', 'Confirmed'), { reserved: 1000002, status: 'Open' });
+  assert.deepEqual(seatChange(event, 'Confirmed', 'Cancelled'), { reserved: 1000000, status: 'Open' });
+  assert.equal(validateOrientation({ title: 'Updated title' }, event).capacity, null);
+  assert.throws(() => validateOrientation({ capacity: 50 }, event), { status: 409 });
+  assert.equal(validateOrientation({ capacity: null }, { ...event, capacity: 1000001, status: 'Fully Booked' }).status, 'Open');
+  assert.equal(validateOrientation({ capacity: null }, { ...event, status: 'Closed' }).status, 'Closed');
+  assert.equal(validateOrientation({ capacity: null }, { ...event, status: 'Draft' }).status, 'Draft');
+});

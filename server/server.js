@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createDevelopmentData } from '../shared/developmentData.js';
-import { isBookableOrientation, normalizePhone, todayInManila } from '../shared/reservationRules.js';
+import { isBookableOrientation, normalizePhone, remainingSlots, todayInManila } from '../shared/reservationRules.js';
 import { bookMySql, changeMySqlReservationStatus, newReference, ORIENTATION_STATUSES, passwordMatches, ReservationError, seatChange, updateMySqlOrientation, validateApplicant, validateOrientation } from './reservationDomain.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -466,7 +466,7 @@ app.get('/api/orientations', verifyAdminToken, async (req, res) => {
   } else {
     let result = mockOrientations.map((o) => ({
       ...o,
-      remaining_slots: Math.max(0, o.capacity - o.reserved)
+      remaining_slots: remainingSlots(o)
     }));
 
     if (branch) {
@@ -494,7 +494,7 @@ app.get('/api/orientations/public', async (req, res) => {
         FROM orientations
         WHERE status IN ('Open', 'Published')
           AND date >= ?
-          AND reserved < capacity
+          AND (capacity IS NULL OR reserved < capacity)
       `;
       const params = [todayInManila()];
       if (branch) {
@@ -518,7 +518,7 @@ app.get('/api/orientations/public', async (req, res) => {
     .filter((item) => isBookableOrientation(item))
     .filter((item) => !branch || item.branch.toLowerCase() === branch.toLowerCase())
     .filter((item) => !orientation_id || String(item.id) === String(orientation_id))
-    .map((item) => ({ ...item, remaining_slots: item.capacity - item.reserved }));
+    .map((item) => ({ ...item, remaining_slots: remainingSlots(item) }));
   return res.json(result);
 });
 
@@ -526,13 +526,16 @@ app.get('/api/orientations/public', async (req, res) => {
 app.post('/api/orientations', verifyAdminToken, async (req, res) => {
   const { title, branch, venue, description, date, start_time, end_time, capacity, status } = req.body;
 
-  if (!title || !branch || !venue || !date || !capacity) {
+  if (!title || !branch || !venue || !date || capacity === undefined) {
     return res.status(400).json({ error: 'Title, branch, venue, date, and capacity are required.' });
   }
 
-  const initialStatus = status || 'Published';
+  let initialStatus = status || 'Published';
+  let normalizedCapacity;
   try {
-    validateOrientation({ ...req.body, start_time: start_time || '09:00 AM', status: initialStatus });
+    const validated = validateOrientation({ ...req.body, start_time: start_time || '09:00 AM', status: initialStatus });
+    initialStatus = validated.status;
+    normalizedCapacity = validated.capacity;
   } catch (error) {
     return res.status(error.status || 400).json({ error: error.message });
   }
@@ -541,7 +544,7 @@ app.post('/api/orientations', verifyAdminToken, async (req, res) => {
     try {
       const [result] = await pool.query(
         'INSERT INTO orientations (title, branch, venue, description, date, start_time, end_time, capacity, reserved, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)',
-        [title, branch, venue, description || '', date, start_time || '09:00 AM', end_time || '12:00 PM', capacity, initialStatus]
+        [title, branch, venue, description || '', date, start_time || '09:00 AM', end_time || '12:00 PM', normalizedCapacity, initialStatus]
       );
       return res.status(201).json({ message: 'Orientation created successfully', id: result.insertId });
     } catch (err) {
@@ -559,7 +562,7 @@ app.post('/api/orientations', verifyAdminToken, async (req, res) => {
       date,
       start_time: start_time || '09:00 AM',
       end_time: end_time || '12:00 PM',
-      capacity: parseInt(capacity),
+      capacity: normalizedCapacity,
       reserved: 0,
       status: initialStatus
     };
@@ -611,7 +614,7 @@ app.patch('/api/orientations/:id/status', verifyAdminToken, async (req, res) => 
   } else {
     const orientation = mockOrientations.find((o) => o.id === parseInt(id));
     if (!orientation) return res.status(404).json({ error: 'Orientation not found.' });
-    orientation.status = ['Open', 'Published'].includes(status) && orientation.reserved >= orientation.capacity ? 'Fully Booked' : status;
+    Object.assign(orientation, validateOrientation({ status }, orientation));
     return res.json({ message: `Orientation status changed to ${status}`, orientation });
   }
 });
@@ -718,7 +721,7 @@ app.post('/api/reservations', async (req, res) => {
 
     // Process reservation
     orientation.reserved += 1;
-    if (orientation.reserved >= orientation.capacity) {
+    if (orientation.capacity !== null && orientation.reserved >= orientation.capacity) {
       orientation.status = 'Fully Booked';
     }
 
@@ -734,13 +737,14 @@ app.post('/api/reservations', async (req, res) => {
       city,
       province,
       notes: notes || '',
-      status: 'Pending',
+      status: 'Confirmed',
       created_at: new Date().toISOString()
     };
     mockReservations.unshift(newRes);
 
     return res.status(201).json({
-      message: 'Reservation submitted successfully',
+      message: 'Reservation confirmed successfully',
+      status: 'Confirmed',
       reference_number: refNumber,
       reservation_id: newResId,
       orientation: {

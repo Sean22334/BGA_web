@@ -131,9 +131,16 @@ supabase/migrations/202608270001_direct_reservation_flow.sql
 supabase/migrations/202608310001_harden_admin_authorization.sql
 supabase/migrations/202609140001_booking_integrity.sql
 supabase/migrations/202610230001_complete_cms_collections.sql
+supabase/migrations/202610230002_auto_confirm_unlimited_capacity.sql
 ```
 
 The migrations replace legacy policies, enable RLS, install the atomic booking and confirmation RPCs, and restrict admin operations to an explicit `admin_users` allowlist. Production intentionally does not fall back to browser-local or in-memory writes when the persistent service is unavailable.
+
+New reservations are automatically Confirmed. Admins can choose Limited capacity
+(default 50 seats) or Unlimited per orientation. See the
+[automatic confirmation and capacity rollout guide](docs/AUTO_CONFIRM_UNLIMITED.md)
+before deploying this update; it requires the new database migration and converts
+existing Pending bookings for future orientations without changing occupied counts.
 
 After creating the administrator in Supabase Authentication, provision that user once from the Supabase SQL editor:
 

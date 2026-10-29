@@ -8,6 +8,7 @@ export default function OrientationFormModal({ isOpen, onClose, eventToEdit, onS
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [limitedCapacity, setLimitedCapacity] = useState(50);
 
   const [formData, setFormData] = useState({
     title: 'FREE Saturday Cruise Career Orientation',
@@ -23,6 +24,7 @@ export default function OrientationFormModal({ isOpen, onClose, eventToEdit, onS
 
   useEffect(() => {
     if (eventToEdit) {
+      setLimitedCapacity(eventToEdit.capacity ?? 50);
       setFormData({
         title: eventToEdit.title || 'FREE Saturday Cruise Career Orientation',
         branch: eventToEdit.branch || 'Tagum',
@@ -31,10 +33,11 @@ export default function OrientationFormModal({ isOpen, onClose, eventToEdit, onS
         date: eventToEdit.date || '',
         start_time: eventToEdit.start_time || '09:00 AM',
         end_time: eventToEdit.end_time || '12:00 PM',
-        capacity: eventToEdit.capacity || 50,
+        capacity: eventToEdit.capacity === null ? null : (eventToEdit.capacity ?? 50),
         status: eventToEdit.status || 'Published'
       });
     } else {
+      setLimitedCapacity(50);
       // Set default date to next Saturday
       const today = new Date();
       const nextSat = new Date();
@@ -193,20 +196,21 @@ export default function OrientationFormModal({ isOpen, onClose, eventToEdit, onS
                 />
               </div>
 
-              {/* Max Capacity */}
+              {/* Capacity mode */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
-                  Max Capacity (Seats) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  max="500"
-                  value={formData.capacity}
-                  onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl bg-slate-950/70 border border-slate-700/80 text-white focus:outline-none focus:border-[#2670f2] text-sm font-semibold"
-                />
+                <label htmlFor="capacity-mode" className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">Capacity Type *</label>
+                <select id="capacity-mode" value={formData.capacity === null ? 'unlimited' : 'limited'}
+                  onChange={(e) => setFormData({ ...formData, capacity: e.target.value === 'unlimited' ? null : limitedCapacity })}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-950/70 border border-slate-700/80 text-white text-sm">
+                  <option value="limited">Limited</option>
+                  <option value="unlimited">Unlimited</option>
+                </select>
+                {formData.capacity !== null ? <>
+                  <label htmlFor="max-capacity" className="block text-xs font-bold text-slate-300 mt-3 mb-1 uppercase tracking-wider">Max Capacity (Seats) *</label>
+                  <input id="max-capacity" type="number" required min="1" max="1000000" value={formData.capacity}
+                    onChange={(e) => { setLimitedCapacity(e.target.value); setFormData({ ...formData, capacity: e.target.value }); }}
+                    className="w-full px-4 py-3 rounded-xl bg-slate-950/70 border border-slate-700/80 text-white text-sm font-semibold" />
+                </> : <p className="mt-2 text-xs text-slate-400">No seat limit. Reservations are still counted.</p>}
               </div>
 
               {/* Start Time */}

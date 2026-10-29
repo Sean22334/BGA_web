@@ -71,6 +71,8 @@ test('Express reservation concurrency, confirmation privacy, and admin seat mana
   const recovery = await request('/reservations/confirmation', { method: 'POST', body: { reference_number: winner.reference_number, phone: winnerApplicant.phone } });
   assert.equal(recovery.status, 200);
   assert.equal(recovery.data.full_name, winnerApplicant.full_name);
+  assert.equal(winner.status, 'Confirmed');
+  assert.equal(recovery.data.reservation_status, 'Confirmed');
   assert.equal(recovery.headers.get('cache-control'), 'no-store');
   assert.deepEqual(Object.keys(recovery.data).sort(), ['reference_number', 'full_name', 'reservation_status', 'orientation_title', 'orientation_branch', 'orientation_venue', 'orientation_date', 'orientation_start_time', 'orientation_end_time', 'submitted_at'].sort());
   const wrongPhone = await request('/reservations/confirmation', { method: 'POST', body: { reference_number: winner.reference_number, phone: '09989999999' } });
@@ -104,6 +106,22 @@ test('Express reservation concurrency, confirmation privacy, and admin seat mana
     assert.equal(hidden.status, 201);
     assert.equal((await request('/reservations', { method: 'POST', body: { ...applicant(5), orientation_id: hidden.data.id } })).status, 409);
   }
+
+  const unlimited = await request('/orientations', { method: 'POST', token, body: { ...event, capacity: null } });
+  assert.equal(unlimited.status, 201);
+  const unlimitedId = unlimited.data.id;
+  for (const n of [6, 7, 8]) {
+    const result = await request('/reservations', { method: 'POST', body: { ...applicant(n), orientation_id: unlimitedId } });
+    assert.equal(result.status, 201);
+    assert.equal(result.data.status, 'Confirmed');
+  }
+  const unlimitedEvent = (await request('/orientations/public')).data.find((item) => item.id === unlimitedId);
+  assert.equal(unlimitedEvent.reserved, 3);
+  assert.equal(unlimitedEvent.remaining_slots, null);
+  assert.equal(unlimitedEvent.status, 'Open');
+  const renamed = await request(`/orientations/${unlimitedId}`, { method: 'PUT', token, body: { title: 'Renamed unlimited' } });
+  assert.equal(renamed.data.orientation.capacity, null);
+  assert.equal((await request(`/orientations/${unlimitedId}`, { method: 'PUT', token, body: { capacity: 2 } })).status, 409);
 });
 
 test('production outage refuses memory fallback even if BGA_DEV_MEMORY is set', { timeout: 30000 }, async (t) => {

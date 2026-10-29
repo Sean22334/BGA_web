@@ -1,3 +1,4 @@
+import { remainingSlots, isBookableOrientation } from '../../../shared/reservationRules.js';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -75,9 +76,10 @@ export default function AdminDashboard() {
   const activeEvents = orientations.filter((o) => o.status === 'Open' || o.status === 'Published');
   const upcomingCount = activeEvents.length;
 
-  const totalCapacity = orientations.reduce((acc, curr) => acc + (curr.capacity || 0), 0);
-  const totalReserved = orientations.reduce((acc, curr) => acc + (curr.reserved || 0), 0);
-  const availableSlots = Math.max(0, totalCapacity - totalReserved);
+  const bookableEvents = orientations.filter((event) => isBookableOrientation(event));
+  const availableSlots = bookableEvents.some((event) => event.capacity === null)
+    ? 'Unlimited'
+    : bookableEvents.reduce((sum, event) => sum + remainingSlots(event), 0);
 
   const kpiCards = [
     { title: "Today's Reservations", value: todaysReservationsCount, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10' },
@@ -200,8 +202,8 @@ export default function AdminDashboard() {
                   <p className="text-xs text-slate-500 py-4 text-center">No orientation events found.</p>
                 ) : (
                   orientations.map((event) => {
-                    const percentage = Math.min(100, Math.round((event.reserved / event.capacity) * 100));
-                    const remaining = Math.max(0, event.capacity - event.reserved);
+                    const percentage = event.capacity === null ? null : Math.min(100, Math.round((event.reserved / event.capacity) * 100));
+                    const remaining = remainingSlots(event);
 
                     return (
                       <div key={event.id} className="p-4 rounded-2xl bg-slate-950/60 border border-white/5 space-y-2.5">
@@ -230,10 +232,10 @@ export default function AdminDashboard() {
                         {/* Capacity Bar */}
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-[11px] font-medium text-slate-300">
-                            <span>Reserved: <strong className="text-white">{event.reserved}</strong> / {event.capacity}</span>
-                            <span>Remaining: <strong className="text-[#2670f2]">{remaining} slots</strong></span>
+                            <span>Reserved: <strong className="text-white">{event.reserved}</strong> / {event.capacity === null ? 'Unlimited' : event.capacity}</span>
+                            <span>Remaining: <strong className="text-[#2670f2]">{remaining === null ? 'Unlimited slots' : `${remaining} slots`}</strong></span>
                           </div>
-                          <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                          {percentage !== null && <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
                             <div
                               className={`h-full transition-all duration-500 ${
                                 percentage >= 100
@@ -244,7 +246,7 @@ export default function AdminDashboard() {
                               }`}
                               style={{ width: `${percentage}%` }}
                             />
-                          </div>
+                          </div>}
                         </div>
                       </div>
                     );

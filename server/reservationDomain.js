@@ -48,8 +48,8 @@ export function seatChange(orientation, previousStatus, nextStatus) {
     return { reserved: Math.max(0, reserved - 1), status: orientation.status === 'Fully Booked' ? 'Open' : orientation.status };
   }
   if (previousStatus === 'Cancelled' && nextStatus !== 'Cancelled') {
-    if (reserved >= capacity) throw new ReservationError(409, 'The orientation is already fully booked.');
-    return { reserved: reserved + 1, status: reserved + 1 >= capacity ? 'Fully Booked' : orientation.status };
+    if (orientation.capacity !== null && reserved >= capacity) throw new ReservationError(409, 'The orientation is already fully booked.');
+    return { reserved: reserved + 1, status: orientation.capacity !== null && reserved + 1 >= capacity ? 'Fully Booked' : orientation.status };
   }
   return { reserved, status: orientation.status };
 }
@@ -57,18 +57,20 @@ export function seatChange(orientation, previousStatus, nextStatus) {
 export const ORIENTATION_STATUSES = ['Draft', 'Published', 'Open', 'Closed', 'Fully Booked'];
 
 export function validateOrientation(input, previous = { reserved: 0 }) {
-  const orientation = { ...previous, ...input, capacity: Number(input.capacity ?? previous.capacity) };
+  const rawCapacity = input.capacity === undefined ? previous.capacity : input.capacity;
+  const orientation = { ...previous, ...input, capacity: rawCapacity === null ? null : Number(rawCapacity) };
   if (['title', 'branch', 'venue'].some((field) => typeof orientation[field] !== 'string' || !orientation[field].trim() || orientation[field].length > 255)
     || !['Tagum', 'Butuan', 'Pagadian', 'Bacolod'].includes(orientation.branch)
-    || !Number.isSafeInteger(orientation.capacity) || orientation.capacity < 1 || orientation.capacity > 1000000
+    || (orientation.capacity !== null && (!Number.isSafeInteger(orientation.capacity) || orientation.capacity < 1 || orientation.capacity > 1000000))
     || !ORIENTATION_STATUSES.includes(orientation.status)
     || !Number.isFinite(orientationStartsAt(orientation))) {
     throw new ReservationError(400, 'Valid title, branch, venue, date, start time, capacity, and status are required.');
   }
-  if (orientation.capacity < Number(previous.reserved)) throw new ReservationError(409, 'Capacity cannot be lower than the number of active reservations.');
+  if (orientation.capacity !== null && orientation.capacity < Number(previous.reserved)) throw new ReservationError(409, 'Capacity cannot be lower than the number of active reservations.');
   // Counts belong to reservation operations, never to request fields.
   orientation.reserved = Number(previous.reserved);
-  if (['Open', 'Published'].includes(orientation.status) && orientation.reserved >= orientation.capacity) orientation.status = 'Fully Booked';
+  if (orientation.capacity === null && orientation.status === 'Fully Booked') orientation.status = 'Open';
+  if (orientation.capacity !== null && ['Open', 'Published'].includes(orientation.status) && orientation.reserved >= orientation.capacity) orientation.status = 'Fully Booked';
   return orientation;
 }
 
@@ -106,11 +108,11 @@ export async function bookMySql(pool, applicant) {
     const reference = newReference();
     const [inserted] = await connection.query(
       'INSERT INTO reservations (orientation_id, reference_number, full_name, phone, email, address, city, province, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [applicant.orientation_id, reference, applicant.full_name, applicant.phone, applicant.email, applicant.address, applicant.city, applicant.province, applicant.notes, 'Pending']
+      [applicant.orientation_id, reference, applicant.full_name, applicant.phone, applicant.email, applicant.address, applicant.city, applicant.province, applicant.notes, 'Confirmed']
     );
     const count = Number(orientation.reserved) + 1;
-    await connection.query('UPDATE orientations SET reserved = ?, status = ? WHERE id = ?', [count, count >= Number(orientation.capacity) ? 'Fully Booked' : orientation.status, orientation.id]);
-    return { message: 'Reservation submitted successfully', reference_number: reference, reservation_id: inserted.insertId, orientation };
+    await connection.query('UPDATE orientations SET reserved = ?, status = ? WHERE id = ?', [count, orientation.capacity !== null && count >= Number(orientation.capacity) ? 'Fully Booked' : orientation.status, orientation.id]);
+    return { message: 'Reservation confirmed successfully', status: 'Confirmed', reference_number: reference, reservation_id: inserted.insertId, orientation };
   });
 }
 

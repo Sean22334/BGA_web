@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import mysql from 'mysql2/promise';
 import { bookMySql, changeMySqlReservationStatus, updateMySqlOrientation } from '../server/reservationDomain.js';
 import { createDevelopmentData } from '../shared/developmentData.js';
@@ -33,6 +34,21 @@ test('MySQL transaction integrity against a real database', { skip: !process.env
     status VARCHAR(30) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (orientation_id) REFERENCES orientations(id) ON DELETE CASCADE, INDEX (orientation_id)
   ) ENGINE=InnoDB`);
+  await pool.query(`INSERT INTO orientations (title, branch, venue, date, start_time, capacity, reserved, status)
+    VALUES ('Upgrade future', 'Tagum', 'Test', DATE_ADD(UTC_DATE(), INTERVAL 7 DAY), '09:00 AM', 50, 1, 'Open'),
+           ('Upgrade past', 'Tagum', 'Test', '2000-01-01', '09:00', 50, 1, 'Open')`);
+  await pool.query(`INSERT INTO reservations (orientation_id, reference_number, full_name, phone, email, status)
+    VALUES (1, 'UPGRADE-FUTURE', 'Test', '09170000901', 'upgrade1@example.com', 'Pending'),
+           (1, 'UPGRADE-CANCELLED', 'Test', '09170000902', 'upgrade2@example.com', 'Cancelled'),
+           (2, 'UPGRADE-PAST', 'Test', '09170000903', 'upgrade3@example.com', 'Pending')`);
+  const upgrade = await readFile(new URL('../server/migrations/202610230002_auto_confirm_unlimited_capacity.sql', import.meta.url), 'utf8');
+  for (const statement of upgrade.split(';').map((sql) => sql.trim()).filter(Boolean)) await pool.query(statement);
+  const [upgraded] = await pool.query('SELECT reference_number, status FROM reservations');
+  assert.deepEqual(Object.fromEntries(upgraded.map((row) => [row.reference_number, row.status])), {
+    'UPGRADE-FUTURE': 'Confirmed', 'UPGRADE-CANCELLED': 'Cancelled', 'UPGRADE-PAST': 'Pending'
+  });
+  const [counts] = await pool.query('SELECT reserved FROM orientations ORDER BY id');
+  assert.deepEqual(counts.map((row) => row.reserved), [1, 1]);
   const fixture = createDevelopmentData().orientations[0];
   const addEvent = async (capacity) => {
     const [result] = await pool.query('INSERT INTO orientations (title, branch, venue, description, date, start_time, end_time, capacity, reserved, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)',
@@ -101,5 +117,25 @@ test('MySQL transaction integrity against a real database', { skip: !process.env
     await bookMySql(pool, applicant(id, 2));
     await assert.rejects(updateMySqlOrientation(pool, id, { capacity: 1 }), { status: 409 });
     assert.equal((await getEvent(id)).capacity, 3);
+  });
+
+  await t.test('unlimited MySQL bookings confirm immediately and preserve counts on reactivation', async () => {
+    const id = await addEvent(1);
+    await updateMySqlOrientation(pool, id, { capacity: null });
+    const first = await bookMySql(pool, applicant(id, 1));
+    const second = await bookMySql(pool, applicant(id, 2));
+    assert.equal(first.status, 'Confirmed');
+    assert.equal(second.status, 'Confirmed');
+    assert.equal((await getEvent(id)).reserved, 2);
+    assert.equal((await getEvent(id)).capacity, null);
+    assert.equal((await getEvent(id)).status, 'Open');
+    await changeMySqlReservationStatus(pool, first.reservation_id, 'Cancelled');
+    await changeMySqlReservationStatus(pool, first.reservation_id, 'Confirmed');
+    assert.equal((await getEvent(id)).reserved, 2);
+    await assert.rejects(updateMySqlOrientation(pool, id, { capacity: 1 }), { status: 409 });
+    await updateMySqlOrientation(pool, id, { capacity: 2 });
+    assert.equal((await getEvent(id)).status, 'Fully Booked');
+    await updateMySqlOrientation(pool, id, { capacity: null });
+    assert.equal((await getEvent(id)).status, 'Open');
   });
 });

@@ -29,9 +29,13 @@ export function orientationStartsAt(orientation) {
   return Date.parse(`${date}T${String(hour).padStart(2, '0')}:${match[2]}:${String(second).padStart(2, '0')}+08:00`);
 }
 
+export function remainingSlots(orientation) {
+  return orientation.capacity === null ? null : Math.max(0, Number(orientation.capacity) - Number(orientation.reserved));
+}
+
 export function isBookableOrientation(orientation, now = new Date()) {
   return ['Open', 'Published'].includes(orientation?.status)
     && orientationStartsAt(orientation) > new Date(now).getTime()
     && Number(orientation.reserved) >= 0
-    && Number(orientation.reserved) < Number(orientation.capacity);
+    && (orientation.capacity === null || Number(orientation.reserved) < Number(orientation.capacity));
 }

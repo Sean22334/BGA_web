@@ -39,6 +39,7 @@ test('direct booking, refresh and reference/phone recovery across devices', asyn
   await page.getByRole('button', { name: 'Confirm & Reserve Slot' }).click();
   await expect(page).toHaveURL(/\/success\?ref=BGA-/);
   await expect(page.getByRole('heading', { name: /Thank You/ })).toBeVisible();
+  await expect(page.getByText('Reservation Confirmed', { exact: true })).toBeVisible();
   const url = new URL(page.url());
   expect([...url.searchParams.keys()]).toEqual(['ref']);
   const reference = url.searchParams.get('ref');
@@ -117,6 +118,10 @@ test('admin can log in, refresh, see booking and change status', async ({ page, 
   await page.goto(`/admin/reservations?orientation_id=${schedule.id}`);
   const row = page.getByRole('row').filter({ hasText: booking.reference_number });
   await expect(row).toBeVisible();
+  await expect(row.getByText('Confirmed', { exact: true })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Confirm', exact: true })).toHaveCount(0);
+  await row.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(row.getByText('Cancelled', { exact: true })).toBeVisible();
   await row.getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(row.getByText('Confirmed', { exact: true })).toBeVisible();
   const lookup = await request.post(`${apiBase}/reservations/confirmation`, { data: { reference_number: booking.reference_number, phone: '09171234567' } });
@@ -129,4 +134,55 @@ test('contact uses real channels and does not pretend to send a form', async ({ 
   await expect(contact.getByRole('link', { name: 'Chat on Messenger', exact: true })).toBeVisible();
   await expect(contact.getByRole('link', { name: 'Open email app', exact: true })).toHaveAttribute('href', /^mailto:/);
   await expect(contact.locator('form')).toHaveCount(0);
+});
+
+test('admin creates and edits unlimited capacity while public counts stay accurate', async ({ page, request }, testInfo) => {
+  await page.goto('/admin/login');
+  await page.getByPlaceholder('admin@example.com').fill(credentials.email);
+  await page.locator('input[type="password"]').fill(credentials.password);
+  await page.getByRole('button', { name: 'Authenticate & Access Portal' }).click();
+  await expect(page).toHaveURL(/\/admin\/dashboard/);
+  await page.goto('/admin/orientations');
+  await page.getByRole('button', { name: 'Create New Orientation', exact: true }).click();
+  await expect(page.getByLabel('Capacity Type')).toHaveValue('limited');
+  await expect(page.getByLabel('Max Capacity (Seats)')).toHaveValue('50');
+  await page.getByLabel('Capacity Type').selectOption('unlimited');
+  await expect(page.getByLabel('Max Capacity (Seats)')).toHaveCount(0);
+  const title = `[TEST] Unlimited ${testInfo.project.name} ${Date.now()}`;
+  await page.getByPlaceholder('e.g. FREE Saturday Cruise Career Orientation').fill(title);
+  await page.getByRole('button', { name: 'Publish Orientation Event', exact: true }).click();
+  const row = page.getByRole('row').filter({ hasText: title });
+  await expect(row.getByText('Unlimited slots', { exact: true })).toBeVisible();
+  const login = await (await request.post(`${apiBase}/auth/login`, { data: credentials })).json();
+  const headers = { Authorization: `Bearer ${login.token}` };
+  const events = await (await request.get(`${apiBase}/orientations`, { headers })).json();
+  const event = events.find((item) => item.title === title);
+  expect(event.capacity).toBeNull();
+  for (const n of [1, 2]) {
+    const result = await request.post(`${apiBase}/reservations`, { data: {
+      ...applicant(`unlimited-${event.id}-${n}`), phone: `0917000040${n}`, orientation_id: event.id
+    } });
+    expect(result.status()).toBe(201);
+    expect((await result.json()).status).toBe('Confirmed');
+  }
+  await row.getByTitle('Edit Event', { exact: true }).click();
+  await expect(page.getByLabel('Capacity Type')).toHaveValue('unlimited');
+  await page.getByLabel('Capacity Type').selectOption('limited');
+  await page.getByLabel('Max Capacity (Seats)').fill('1');
+  await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  await expect(page.getByText('Capacity cannot be lower than the number of active reservations.', { exact: true })).toBeVisible();
+  await page.getByLabel('Max Capacity (Seats)').fill('2');
+  await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  await expect(page.getByLabel('Capacity Type')).toHaveCount(0);
+  await expect(row.getByText('Fully Booked', { exact: true })).toBeVisible();
+  await row.getByTitle('Edit Event', { exact: true }).click();
+  await page.getByLabel('Capacity Type').selectOption('unlimited');
+  await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  await expect(page.getByLabel('Capacity Type')).toHaveCount(0);
+  await page.goto('/reserve?branch=Tagum');
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+  const card = page.locator('.surface-card').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+  await expect(card.getByText('UNLIMITED SLOTS', { exact: true })).toBeVisible();
+  await expect(card.getByText('2 / Unlimited', { exact: true })).toBeVisible();
+  await card.screenshot({ path: testInfo.outputPath('unlimited-public-schedule.png'), animations: 'disabled', timeout: 10000 });
 });

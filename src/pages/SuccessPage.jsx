@@ -156,7 +156,7 @@ export default function SuccessPage() {
           <div>
             <span className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 text-xs font-bold uppercase tracking-wider ${statusClasses}`}><Sparkles className="h-3.5 w-3.5" />Reservation {status}</span>
             <h1 className="mt-4 text-3xl font-black text-white sm:text-4xl">Thank You, <span className="text-gold-gradient">{confirmation.full_name}</span>!</h1>
-            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">Keep your reference number. BGA Admissions will contact you directly regarding your seat confirmation and attendance instructions.</p>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">{status === 'Confirmed' ? 'Your slot is confirmed. Keep your reference number and arrive at the scheduled date, time, and venue.' : status === 'Cancelled' ? 'This reservation has been cancelled. Contact Admissions if you need assistance.' : 'Keep your reference number. Contact Admissions regarding this existing pending reservation.'}</p>
           </div>
 
           <div className="mx-auto flex w-full max-w-md flex-col items-center justify-center gap-3 rounded-2xl border border-[#2670f2]/40 bg-[#07152B] p-5 sm:flex-row">

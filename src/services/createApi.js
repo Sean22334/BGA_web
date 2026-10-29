@@ -1,4 +1,4 @@
-import { isBookableOrientation, todayInManila } from '../../shared/reservationRules.js';
+import { isBookableOrientation, remainingSlots, todayInManila } from '../../shared/reservationRules.js';
 
 const unavailable = () => new Error('The admissions service is temporarily unavailable. Please try again shortly.');
 
@@ -21,11 +21,11 @@ export function normalizeConfirmation(row) {
 function orientationPayload(value) {
   return Object.fromEntries([
     'title', 'branch', 'venue', 'description', 'date', 'start_time', 'end_time', 'capacity', 'status'
-  ].filter((key) => value[key] !== undefined).map((key) => [key, key === 'capacity' ? Number(value[key]) : value[key]]));
+  ].filter((key) => value[key] !== undefined).map((key) => [key, key === 'capacity' && value[key] !== null ? Number(value[key]) : value[key]]));
 }
 
 function withRemaining(orientation) {
-  return { ...orientation, remaining_slots: Math.max(0, Number(orientation.capacity) - Number(orientation.reserved)) };
+  return { ...orientation, remaining_slots: remainingSlots(orientation) };
 }
 
 function queryString(filters) {

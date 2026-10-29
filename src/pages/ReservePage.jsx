@@ -1,3 +1,4 @@
+import { remainingSlots } from '../../shared/reservationRules.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -190,12 +191,12 @@ export default function ReservePage() {
       const res = await api.submitReservation(payload);
 
       const generatedRef = res?.reference_number || res?.confirmation?.reference_number;
-      if (!generatedRef) throw new Error('Reservation was received but no confirmation reference was returned. Please contact Admissions.');
+      if (!generatedRef || !(res?.confirmation?.status || res?.status)) throw new Error('The reservation response is incomplete. Please contact Admissions before submitting again.');
 
       const confirmation = res?.confirmation || {
         reference_number: generatedRef,
         full_name: data.fullName,
-        status: 'Pending',
+        status: res.status,
         orientation_title: selectedEvent.title,
         orientation_branch: selectedEvent.branch,
         orientation_venue: selectedEvent.venue,
@@ -257,7 +258,7 @@ export default function ReservePage() {
     {
       id: 'faq-1',
       q: 'How do I know if my reservation is confirmed?',
-      a: 'Our Admissions Team will contact you via phone or SMS within 24 hours to confirm your schedule and provide attendance instructions.'
+      a: 'Your slot is automatically confirmed after a successful submission. Keep your reference number and follow the date, time, and venue shown on your confirmation page.'
     },
     {
       id: 'faq-2',
@@ -267,7 +268,7 @@ export default function ReservePage() {
     {
       id: 'faq-3',
       q: 'Can I change my reservation date?',
-      a: 'Absolutely. If you need to reschedule, simply notify our team when we contact you or reply to your confirmation message.'
+      a: 'Please contact our Admissions Team through the listed contact channels if you need to reschedule.'
     },
     {
       id: 'faq-4',
@@ -309,7 +310,7 @@ export default function ReservePage() {
             transition={{ delay: 0.2 }}
             className="mt-4 text-slate-300 text-base sm:text-lg font-normal leading-relaxed max-w-2xl mx-auto"
           >
-            Reserve your slot for our FREE Career Orientation or Cruise Career Training Program. Complete the registration form below and our Admissions Team will contact you shortly.
+            Reserve your slot for our FREE Career Orientation or Cruise Career Training Program. Submit the form to receive your confirmed slot and attendance details.
           </motion.p>
         </div>
 
@@ -364,7 +365,7 @@ export default function ReservePage() {
                 </div>
               ) : (
                 orientations.map((event) => {
-                  const remaining = Math.max(0, event.capacity - event.reserved);
+                  const remaining = remainingSlots(event);
                   const isFull = remaining === 0 || event.status === 'Fully Booked';
 
                   return (
@@ -397,7 +398,7 @@ export default function ReservePage() {
                               : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                           }`}
                         >
-                          {isFull ? 'FULLY BOOKED' : `${remaining} SLOTS REMAINING`}
+                          {isFull ? 'FULLY BOOKED' : remaining === null ? 'UNLIMITED SLOTS' : `${remaining} SLOTS REMAINING`}
                         </span>
                       </div>
 
@@ -435,15 +436,15 @@ export default function ReservePage() {
                       <div className="mt-5 pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div className="w-full sm:w-1/2 space-y-1">
                           <div className="flex justify-between text-[11px] font-semibold text-slate-300">
-                            <span>Seats Reserved: <strong className="text-white">{event.reserved} / {event.capacity}</strong></span>
-                            <span>{Math.round((event.reserved / event.capacity) * 100)}%</span>
+                            <span>Seats Reserved: <strong className="text-white">{event.reserved} / {event.capacity === null ? 'Unlimited' : event.capacity}</strong></span>
+                            {remaining !== null && <span>{Math.round((event.reserved / event.capacity) * 100)}%</span>}
                           </div>
-                          <div className="w-full h-2 rounded-full bg-slate-900 overflow-hidden border border-white/5">
+                          {remaining !== null && <div className="w-full h-2 rounded-full bg-slate-900 overflow-hidden border border-white/5">
                             <div
                               className={`h-full transition-all duration-500 ${isFull ? 'bg-red-500' : 'bg-[#2670f2]'}`}
                               style={{ width: `${Math.min(100, (event.reserved / event.capacity) * 100)}%` }}
                             />
-                          </div>
+                          </div>}
                         </div>
 
                         <button

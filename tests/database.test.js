@@ -135,6 +135,7 @@ describe(`Supabase migrations executed against ${postgresUrl ? 'PostgreSQL (inde
 
   test('confirmation lookup requires both reference and phone and never exposes private fields', async () => {
     const booking = (await book()).rows[0];
+    assert.equal(booking.reservation_status, 'Confirmed');
     assert.match(booking.reference_number, /^BGA-\d{4}-[A-F0-9]{32}$/);
     const confirmation = await asRole('anon', 'select * from public.lookup_reservation_confirmation($1, $2)', [booking.reference_number, '0917-000-0001']);
     assert.deepEqual(confirmation.rows[0], booking);
@@ -147,6 +148,28 @@ describe(`Supabase migrations executed against ${postgresUrl ? 'PostgreSQL (inde
     const wrongReference = await asRole('anon', 'select * from public.lookup_reservation_confirmation($1, $2)', ['BGA-NOT-REAL', '09170000001']);
     assert.deepEqual(wrongPhone.rows, []);
     assert.deepEqual(wrongReference.rows, wrongPhone.rows);
+  });
+
+  test('unlimited schedules confirm simultaneous bookings and enforce safe capacity changes', async () => {
+    await asRole('authenticated', 'update public.orientations set capacity = null where id = 1', [], ADMIN);
+    const results = await Promise.all([1, 2, 3].map((n) => book({ phone: `0917000010${n}`, email: `unlimited${n}@example.com` })));
+    assert.ok(results.every((result) => result.rows[0].reservation_status === 'Confirmed'));
+    assert.deepEqual(await orientation(), { reserved: 3, capacity: null, status: 'Open' });
+    assert.ok((await asRole('anon', 'select id from public.orientations')).rows.some((row) => row.id === 1));
+    await assert.rejects(book({ phone: '09170000101', email: 'different@example.com' }), { code: '23505' });
+    await assert.rejects(asRole('authenticated', 'update public.orientations set capacity = 2 where id = 1', [], ADMIN), { code: '23514' });
+    await status(1, 'Cancelled');
+    assert.equal((await orientation()).reserved, 2);
+    await status(1, 'Confirmed');
+    await asRole('authenticated', 'update public.orientations set capacity = 3 where id = 1', [], ADMIN);
+    assert.equal((await orientation()).status, 'Fully Booked');
+    await asRole('authenticated', 'update public.orientations set capacity = null where id = 1', [], ADMIN);
+    assert.equal((await orientation()).status, 'Open');
+    for (const publication of ['Closed', 'Draft']) {
+      await asRole('authenticated', 'update public.orientations set status = $1 where id = 1', [publication], ADMIN);
+      await assert.rejects(book({ phone: '09170000109', email: 'closed@example.com' }), /no longer available/);
+      assert.equal((await orientation()).status, publication);
+    }
   });
 
   test('duplicate email and formatted phone are rejected without incrementing the count', async () => {
