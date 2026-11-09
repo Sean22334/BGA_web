@@ -143,6 +143,7 @@ test('admin creates and edits unlimited capacity while public counts stay accura
   await page.getByRole('button', { name: 'Authenticate & Access Portal' }).click();
   await expect(page).toHaveURL(/\/admin\/dashboard/);
   await page.goto('/admin/orientations');
+  await page.getByRole('button', { name: 'List view', exact: true }).click();
   await page.getByRole('button', { name: 'Create New Orientation', exact: true }).click();
   await expect(page.getByLabel('Capacity Type')).toHaveValue('limited');
   await expect(page.getByLabel('Max Capacity (Seats)')).toHaveValue('50');

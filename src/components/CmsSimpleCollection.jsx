@@ -21,7 +21,7 @@ export default function CmsSimpleCollection({ collection, items, saving, onSave,
         <button type="button" onClick={() => setDraft(emptyItem)} className="btn-primary">Add {collection === 'stats' ? 'statistic' : 'partner'}</button>
       </div>
       {draft && (
-        <form onSubmit={async (event) => { event.preventDefault(); await onSave(collection, draft, !!draft.id); }} className="grid sm:grid-cols-2 gap-4 border border-slate-700 rounded-2xl p-5">
+        <form onSubmit={async (event) => { event.preventDefault(); if (await onSave(collection, draft, !!draft.id)) setDraft(null); }} className="grid sm:grid-cols-2 gap-4 border border-slate-700 rounded-2xl p-5">
           {FIELDS[collection].map(([field, label, type]) => (
             <label key={field} className="text-sm text-slate-300">{label}<input type={type} required={field !== 'logo_url'} value={draft[field] || ''} onChange={(event) => setDraft({ ...draft, [field]: event.target.value })} className="mt-1 block w-full rounded-xl bg-slate-950 border border-slate-600 p-3 text-white" /></label>
           ))}
@@ -32,7 +32,7 @@ export default function CmsSimpleCollection({ collection, items, saving, onSave,
       )}
       {items.length === 0 && <p className="text-slate-400">No {collection} configured.</p>}
       {items.map((item) => (
-        <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 border border-slate-800 rounded-xl p-4">
+        <div data-cms-item={`${collection}:${item.id}`} key={item.id} className="flex flex-wrap items-center justify-between gap-3 border border-slate-800 rounded-xl p-4">
           <div><p className="font-semibold text-white">{collection === 'stats' ? `${item.value} ${item.label}` : item.name}</p><p className="text-xs text-slate-400">{item.is_published ? 'Published' : 'Draft'} · Order {item.display_order || 0}</p></div>
           <div className="flex gap-3"><button type="button" onClick={() => setDraft({ ...item })} className="text-sm text-[#70a6ff]">Edit</button><button type="button" disabled={saving} onClick={() => onDelete(item)} className="text-sm text-red-300">Delete</button></div>
         </div>

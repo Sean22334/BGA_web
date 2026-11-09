@@ -7,6 +7,7 @@ import Gallery from '../components/Gallery';
 import Testimonials from '../components/Testimonials';
 import FAQ from '../components/FAQ';
 import Contact from '../components/Contact';
+import PublishingPreview from '../components/PublishingPreview';
 
 export default function HomePage() {
   return (
@@ -15,7 +16,9 @@ export default function HomePage() {
       <AboutUs />
       <Programs />
       <TrainingCenters />
+      <PublishingPreview kind="updates" />
       <Gallery />
+      <PublishingPreview kind="alumni" />
       <Testimonials />
       <FAQ />
       <Contact />

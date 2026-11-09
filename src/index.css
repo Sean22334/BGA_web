@@ -50,6 +50,11 @@
   font-family: "Google Sans Flex", "Google Sans", sans-serif !important;
 }
 
+.article-editor p { margin-bottom: 0.75rem; }
+.article-editor ul { list-style: disc; padding-left: 1.5rem; }
+.article-editor ol { list-style: decimal; padding-left: 1.5rem; }
+.article-editor a { color: #70a6ff; text-decoration: underline; }
+
 /* Glassmorphism & Surface Tokens */
 .glass-panel {
   background: rgba(5, 13, 26, 0.75);

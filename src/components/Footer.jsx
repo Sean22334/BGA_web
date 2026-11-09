@@ -65,6 +65,8 @@ export default function Footer() {
               <li><a href="/#programs" className="hover:text-white transition-colors duration-200">Training Programs</a></li>
               <li><a href="/#centers" className="hover:text-white transition-colors duration-200">Training Centers</a></li>
               <li><a href="/#gallery" className="hover:text-white transition-colors duration-200">Campus Gallery</a></li>
+              <li><Link to="/news" className="hover:text-white transition-colors duration-200">News & Updates</Link></li>
+              <li><Link to="/alumni" className="hover:text-white transition-colors duration-200">Alumni Album</Link></li>
               <li><a href="/#testimonials" className="hover:text-white transition-colors duration-200">Graduate Stories</a></li>
               <li><a href="/#faq" className="hover:text-white transition-colors duration-200">FAQ</a></li>
               <li>

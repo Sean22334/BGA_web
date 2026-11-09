@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import mysql from 'mysql2/promise';
 import { bookMySql, changeMySqlReservationStatus, updateMySqlOrientation } from '../server/reservationDomain.js';
 import { createDevelopmentData } from '../shared/developmentData.js';
+import { startTestServer } from './helpers/server.js';
 
 // MYSQL_TEST_URL must identify a test service whose user may create temporary databases.
 // The application's DB_* environment values are deliberately never used by this suite.
@@ -57,6 +58,53 @@ test('MySQL transaction integrity against a real database', { skip: !process.env
   };
   const applicant = (id, suffix) => ({ orientation_id: id, full_name: `MySQL Test ${suffix}`, phone: `0998000000${suffix}`, email: `mysql${suffix}@example.com`, address: 'Demo', city: 'Tagum', province: 'Davao', notes: '' });
   const getEvent = async (id) => (await pool.query('SELECT * FROM orientations WHERE id = ?', [id]))[0][0];
+
+  await t.test('MySQL CMS migration, all collection CRUD, publication and empty content', async (cmsTest) => {
+    const schema = await readFile(new URL('../server/schema.sql', import.meta.url), 'utf8');
+    await pool.query('CREATE TABLE cms_stats (id INT AUTO_INCREMENT PRIMARY KEY, stat_key VARCHAR(50) UNIQUE, value VARCHAR(50), label VARCHAR(150), icon VARCHAR(50), display_order INT DEFAULT 0)');
+    await pool.query("INSERT INTO cms_stats (stat_key, value, label, icon) VALUES ('legacy', '1', 'Legacy statistic', 'Award')");
+    const cmsSchemaStart = schema.indexOf('-- 4. Site Settings');
+    assert.ok(cmsSchemaStart >= 0);
+    for (const statement of schema.slice(cmsSchemaStart).split(';').map((sql) => sql.trim()).filter(Boolean)) await pool.query(statement);
+    const migration = await readFile(new URL('../server/migrations/202611030001_cms_statistics_publication.sql', import.meta.url), 'utf8');
+    const session = await pool.getConnection();
+    try {
+      for (let run = 0; run < 2; run++) for (const statement of migration.split(';').map((sql) => sql.trim()).filter(Boolean)) await session.query(statement);
+    } finally { session.release(); }
+    assert.equal((await pool.query('SELECT is_published FROM cms_stats WHERE stat_key = ?', ['legacy']))[0][0].is_published, 1);
+    const { hash } = await import('bcryptjs');
+    await pool.query('CREATE TABLE admins (id INT PRIMARY KEY, email VARCHAR(255), name VARCHAR(255), password_hash VARCHAR(255), role VARCHAR(30))');
+    await pool.query('INSERT INTO admins VALUES (1, ?, ?, ?, ?)', ['admin-test@example.com', 'CMS Tester', await hash('local-only-test-password', 4), 'admin']);
+    const { request, token } = await startTestServer(cmsTest, { BGA_DEV_MEMORY: 'false', DB_HOST: url.hostname, DB_PORT: url.port || '3306', DB_USER: decodeURIComponent(url.username), DB_PASSWORD: decodeURIComponent(url.password), DB_NAME: databaseName });
+    assert.ok(token);
+    const cases = { programs: { title: 'DB course' }, branches: { name: 'DB branch' }, gallery: { title: 'DB gallery', image: '/images/culinary_lab.jpg' }, testimonials: { name: 'DB tester', quote: 'Quote' }, faqs: { question: 'Question?', answer: 'Answer' }, stats: { stat_key: 'db_stat', label: 'Statistic', value: '2' }, partners: { name: 'DB partner' } };
+    for (const [collection, item] of Object.entries(cases)) {
+      const route = `/admin/${collection}`;
+      const created = await request(route, { method: 'POST', token, body: item });
+      assert.equal(created.status, 201, JSON.stringify(created.data));
+      const id = created.data.id;
+      assert.ok(!(await request('/content/public')).data[collection].some((row) => row.id === id));
+      assert.equal((await request(`${route}/${id}`, { method: 'PUT', token, body: { ...item, is_published: true } })).status, 200);
+      assert.ok((await request('/content/public')).data[collection].some((row) => row.id === id));
+      for (const row of (await request('/admin/content/all', { token })).data[collection]) assert.equal((await request(`${route}/${row.id}`, { method: 'DELETE', token })).status, 200);
+      assert.deepEqual((await request('/content/public')).data[collection], []);
+    }
+    const publishingSchema = await readFile(new URL('../server/migrations/202611090001_news_alumni.sql', import.meta.url), 'utf8');
+    for (let run = 0; run < 2; run++) for (const statement of publishingSchema.split(';').map((sql) => sql.trim()).filter(Boolean)) await pool.query(statement);
+    for (const [kind, body] of Object.entries({ updates: { title: 'SQL update', category: 'event', summary: 'Summary', cover_image: '/test.png', body_json: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Body' }] }] } }, alumni: { name: 'SQL alumnus', image: '/test.png', batch: 'SQL batch', company: 'Company', position: 'Position' } })) {
+      const created = await request(`/admin/${kind}`, { method: 'POST', token, body });
+      assert.equal(created.status, 201, JSON.stringify(created.data));
+      assert.equal((await request(`/${kind}`)).data.total, 0);
+      assert.equal((await request(`/admin/${kind}/${created.data.id}`, { method: 'PUT', token, body: { ...body, is_published: true } })).status, 200);
+      assert.equal((await request(`/${kind}`)).data.total, 1);
+      assert.equal((await request(`/admin/${kind}/${created.data.id}`, { token })).data.is_published, true);
+      await request(`/admin/${kind}/${created.data.id}`, { method: 'DELETE', token });
+      assert.equal((await request(`/${kind}`)).data.total, 0);
+    }
+    await pool.query('DROP TABLE cms_gallery');
+    assert.equal((await request('/content/public')).status, 503);
+    assert.equal((await request('/admin/content/all', { token })).status, 503);
+  });
 
   await t.test('exactly one concurrent final-seat booking commits', async () => {
     const id = await addEvent(1);

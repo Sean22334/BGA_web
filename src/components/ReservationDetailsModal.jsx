@@ -19,23 +19,26 @@ export default function ReservationDetailsModal({
   isOpen,
   onClose,
   reservation,
-  onStatusChange
+  onStatusChange,
+  saving = false
 }) {
   if (!isOpen || !reservation) return null;
 
-  const copyRefNumber = () => {
-    navigator.clipboard.writeText(reservation.reference_number);
-    alert(`Copied Reference Number: ${reservation.reference_number}`);
+  const copyRefNumber = async () => {
+    try {
+      await navigator.clipboard.writeText(reservation.reference_number);
+      alert(`Copied Reference Number: ${reservation.reference_number}`);
+    } catch { alert('Copy failed. Select and copy the reference number manually.'); }
   };
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
+      <div role="dialog" aria-label="Reservation details" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="glass-panel w-full max-w-2xl p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 shadow-2xl relative my-8 text-left space-y-6"
+          className="glass-panel w-full max-h-[90dvh] overflow-y-auto max-w-2xl p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 shadow-2xl relative my-8 text-left space-y-6"
         >
           {/* Top Decorative Blue Accent Line */}
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 via-[#2670f2] to-blue-700" />
@@ -181,10 +184,8 @@ export default function ReservationDetailsModal({
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               {reservation.status !== 'Confirmed' && (
                 <button
-                  onClick={() => {
-                    onStatusChange(reservation.id, 'Confirmed');
-                    onClose();
-                  }}
+                  disabled={saving}
+                  onClick={() => onStatusChange(reservation.id, 'Confirmed')}
                   className="px-5 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <CheckCircle2 className="w-4 h-4" />
@@ -194,10 +195,8 @@ export default function ReservationDetailsModal({
 
               {reservation.status !== 'Cancelled' && (
                 <button
-                  onClick={() => {
-                    onStatusChange(reservation.id, 'Cancelled');
-                    onClose();
-                  }}
+                  disabled={saving}
+                  onClick={() => onStatusChange(reservation.id, 'Cancelled')}
                   className="px-5 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-400 text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <XCircle className="w-4 h-4" />

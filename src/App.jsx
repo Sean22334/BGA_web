@@ -13,6 +13,8 @@ const enableAdmin = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN ===
 const HomePage = lazy(() => import('./pages/HomePage'));
 const ReservePage = lazy(() => import('./pages/ReservePage'));
 const SuccessPage = lazy(() => import('./pages/SuccessPage'));
+const PublishingListPage = lazy(() => import('./pages/PublishingListPage'));
+const NewsDetailPage = lazy(() => import('./pages/NewsDetailPage'));
 const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -56,6 +58,9 @@ function MainLayout() {
           <Route path="/" element={<HomePage />} />
           <Route path="/reserve" element={<ReservePage />} />
           <Route path="/success" element={<SuccessPage />} />
+          <Route path="/news" element={<PublishingListPage key="news" kind="updates" />} />
+          <Route path="/news/:id" element={<NewsDetailPage />} />
+          <Route path="/alumni" element={<PublishingListPage key="alumni" kind="alumni" />} />
           {enableAdmin ? (
             <>
               <Route path="/admin/login" element={<AdminLogin />} />

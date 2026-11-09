@@ -30,6 +30,10 @@ const DEFAULT_SETTINGS = {
   about_vision_title: 'Our Vision',
   about_vision_desc: 'To be the most recognized and trusted cruise career training brand in Southeast Asia, preferred by global cruise liners for producing disciplined, highly skilled, and compassionate maritime professionals.',
   about_why_title: 'Why Choose Bluechef Global Academy?',
+  about_history_title: 'Our History',
+  about_history_body: '',
+  about_history_image: '',
+  about_history_enabled: 'false',
   about_why_items: [
     { title: 'TESDA-Aligned Curriculum', desc: 'Programs designed strictly according to international maritime (STCW & MLC 2006) and USPH culinary standards.', icon: 'ShieldCheck' },
     { title: 'State-of-the-Art Labs', desc: 'Train in fully equipped commercial kitchens and mock cruise staterooms that mirror real shipboard environments.', icon: 'Building2' },
@@ -78,10 +82,12 @@ export function ContentProvider({ children }) {
           setPartners(partnerNames);
         }
         setError(null);
+        return true;
       }
     } catch (err) {
       setError(err.message || 'Website content could not be refreshed.');
       console.warn('ContentContext fetch warning:', err);
+      return false;
     } finally {
       setLoading(false);
     }

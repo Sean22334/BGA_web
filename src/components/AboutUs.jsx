@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Target, Eye, ShieldCheck, Sparkles, CheckCircle2, Building2, Anchor } from 'lucide-react';
 import { useContent } from '../context/useContent';
+import { published } from '../../shared/cmsRules.js';
 
 export default function AboutUs() {
   const { settings, partners } = useContent();
@@ -53,6 +54,12 @@ export default function AboutUs() {
           </p>
         </motion.div>
 
+        {published(settings.about_history_enabled) && settings.about_history_body?.trim() && (
+          <div role="region" className={`grid gap-8 items-center mb-20 ${settings.about_history_image ? 'md:grid-cols-2' : ''}`} aria-label="Our History">
+            {settings.about_history_image && <img src={settings.about_history_image} alt={settings.about_history_title || 'Our History'} loading="lazy" className="rounded-3xl w-full max-h-[30rem] object-cover" />}
+            <div><h3 className="text-3xl font-bold text-white mb-6">{settings.about_history_title || 'Our History'}</h3><p className="text-slate-400 whitespace-pre-wrap leading-8">{settings.about_history_body}</p></div>
+          </div>
+        )}
         {/* Mission & Vision Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mb-24">
           
@@ -94,7 +101,7 @@ export default function AboutUs() {
         </div>
 
         {/* Why Choose Bluechef Global Academy */}
-        <div>
+        {whyChooseUs.length > 0 && <div role="region" aria-label="Why Choose">
           <motion.div {...fadeUp} className="text-center mb-14">
             <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
               {settings.about_why_title || 'Why Choose Bluechef Global Academy?'}
@@ -131,7 +138,7 @@ export default function AboutUs() {
               );
             })}
           </div>
-        </div>
+        </div>}
 
         {/* Industry Partners Bar */}
         <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.2 }} className="mt-24 text-center">

@@ -27,6 +27,7 @@ export default function Navbar() {
     { name: 'Programs', href: '/#programs' },
     { name: 'Training Centers', href: '/#centers' },
     { name: 'Gallery', href: '/#gallery' },
+    { name: 'News & Updates', href: '/news' },
     { name: 'Testimonials', href: '/#testimonials' },
     { name: 'FAQ', href: '/#faq' },
     { name: 'Contact', href: '/#contact' },
@@ -78,18 +79,26 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop Nav Links */}
-          <div className="hidden lg:flex items-center gap-1 xl:gap-2">
-            {navLinks.map((link) => (
+          <div className="hidden xl:flex items-center gap-0.5">
+            {navLinks.map((link) => link.name === 'Gallery' ? (
+              <details key="Gallery" className="relative group">
+                <summary className="px-2 py-2 cursor-pointer rounded-xl text-xs font-semibold text-slate-300 hover:text-white">Gallery</summary>
+                <div className="absolute top-full left-0 min-w-44 p-2 rounded-xl bg-[#0B1D3A] border border-slate-700 shadow-xl">
+                  <a href="/#gallery" className="block p-3 text-xs hover:text-white">Campus Gallery</a>
+                  <Link to="/alumni" className="block p-3 text-xs hover:text-white" onClick={(event) => event.currentTarget.closest('details').removeAttribute('open')}>Alumni Album</Link>
+                </div>
+              </details>
+            ) : (
               <a
                 key={link.name}
                 href={link.href}
                 onClick={(e) => {
-                  if (location.pathname === '/') {
+                  if (location.pathname === '/' && link.href.startsWith('/#')) {
                     e.preventDefault();
                     handleNavClick(link.href);
                   }
                 }}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/5 transition-all duration-200"
+                className="px-2 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/5 transition-all duration-200"
               >
                 {link.name}
               </a>
@@ -118,7 +127,7 @@ export default function Navbar() {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-2.5 rounded-xl border border-slate-800 bg-[#0B1D3A]/80 text-slate-200 hover:text-white focus:outline-none"
+            className="xl:hidden p-2.5 rounded-xl border border-slate-800 bg-[#0B1D3A]/80 text-slate-200 hover:text-white focus:outline-none"
             aria-label="Toggle Navigation Menu"
           >
             {mobileMenuOpen ? <X className="w-6 h-6 text-[#2670f2]" /> : <Menu className="w-6 h-6 text-slate-200" />}
@@ -127,14 +136,14 @@ export default function Navbar() {
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="lg:hidden glass-panel border-b border-[#2670f2]/20 px-4 pt-4 pb-6 mt-2 mx-3 rounded-2xl animate-fadeIn space-y-3">
+          <div className="xl:hidden glass-panel border-b border-[#2670f2]/20 px-4 pt-4 pb-6 mt-2 mx-3 rounded-2xl animate-fadeIn space-y-3">
             <div className="grid grid-cols-1 gap-1">
-              {navLinks.map((link) => (
+              {[...navLinks.map((link) => link.name === 'Gallery' ? { ...link, name: 'Campus Gallery' } : link), { name: 'Alumni Album', href: '/alumni' }].map((link) => (
                 <a
                   key={link.name}
                   href={link.href}
                   onClick={(e) => {
-                    if (location.pathname === '/') {
+                    if (location.pathname === '/' && link.href.startsWith('/#')) {
                       e.preventDefault();
                       handleNavClick(link.href);
                     } else {

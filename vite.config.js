@@ -7,6 +7,11 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
+      '/uploads': {
+        target: process.env.BGA_API_PROXY_TARGET || 'http://localhost:5000',
+        changeOrigin: true,
+        secure: false
+      },
       '/api': {
         target: process.env.BGA_API_PROXY_TARGET || 'http://localhost:5000',
         changeOrigin: true,

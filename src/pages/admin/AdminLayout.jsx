@@ -69,6 +69,7 @@ export default function AdminLayout() {
               </div>
             </Link>
             <button
+              aria-label="Close management menu"
               onClick={() => setMobileSidebarOpen(false)}
               className="md:hidden text-slate-400 hover:text-white"
             >
@@ -148,6 +149,7 @@ export default function AdminLayout() {
         <header className="sticky top-0 z-30 bg-[#050D1A]/90 backdrop-blur-md border-b border-slate-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
+              aria-label="Open management menu"
               onClick={() => setMobileSidebarOpen(true)}
               className="md:hidden p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-200"
             >

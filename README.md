@@ -228,6 +228,10 @@ BGA_landing_page/
 
 ## Verification and rollout
 
+See [the November 9 feature and rollout guide](docs/FEATURES_2026-11-09.md) for News & Updates, Alumni Album, History/Why Choose editing, the admin calendar, the live branch-key migration, and the current verification/handoff.
+
+See [the local admin QA report](docs/ADMIN_QA.md) for the admin/CMS test matrix, fixes, isolated browser tests, and the standalone MySQL Statistics publication prerequisite.
+
 See [the rollout checklist](docs/ROLLOUT.md) for migration prerequisites, isolated demo mode, automated tests, and outstanding live verification. A configured Supabase client never silently switches reservation storage after an error, including in development. There are no browser-local reservation writes.
 
 ## License

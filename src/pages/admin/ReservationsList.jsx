@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { reservationCsv } from '../../lib/reservationCsv.js';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Users,
@@ -26,6 +27,11 @@ export default function ReservationsList() {
   const [orientations, setOrientations] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [error, setError] = useState('');
+  const [updatingId, setUpdatingId] = useState(null);
+  const requestVersion = useRef(0);
+  const statusLock = useRef(false);
+
   // Filters
   const [search, setSearch] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('All');
@@ -38,6 +44,7 @@ export default function ReservationsList() {
 
 
   const fetchData = useCallback(async (isSilent = false) => {
+    const version = ++requestVersion.current;
     if (!isSilent) setLoading(true);
     try {
       const [oList, rList] = await Promise.all([
@@ -49,12 +56,15 @@ export default function ReservationsList() {
           search
         })
       ]);
+      if (version !== requestVersion.current) return;
+      setError('');
       setOrientations(oList || []);
       setReservations(rList || []);
+      setSelectedReservationDetails((current) => current ? (rList || []).find((row) => row.id === current.id) || null : null);
     } catch (err) {
-      console.error(err);
+      if (version === requestVersion.current) setError(err.message || 'Reservations could not be loaded.');
     } finally {
-      if (!isSilent) setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }, [token, selectedBranch, selectedStatus, selectedOrientation, search]);
 
@@ -79,37 +89,30 @@ export default function ReservationsList() {
   }, [fetchData]);
 
   const handleStatusChange = async (id, newStatus) => {
+    if (statusLock.current) return;
+    statusLock.current = true;
+    setUpdatingId(id);
     try {
       await api.updateReservationStatus(id, newStatus, token);
-      fetchData();
-    } catch (err) {
-      alert(err.message);
-    }
+      await fetchData(true);
+    } catch (err) { setError(err.message); }
+    finally { statusLock.current = false; setUpdatingId(null); }
   };
 
   const exportSummary = () => {
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      ['Ref Code,Full Name,Phone,Email,City,Branch,Date,Status']
-        .concat(
-          reservations.map(
-            (r) =>
-              `"${r.reference_number}","${r.full_name}","${r.phone}","${r.email}","${r.city}","${r.orientation_branch}","${r.orientation_date}","${r.status}"`
-          )
-        )
-        .join('\n');
-
-    const encodedUri = encodeURI(csvContent);
+    const url = URL.createObjectURL(new Blob([reservationCsv(reservations)], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `bga_reservations_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.href = url;
+    link.download = 'bga_reservations_export_' + new Date().toISOString().slice(0, 10) + '.csv';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
     <div className="space-y-6">
+      {error && <div role="alert" className="rounded-xl border border-red-400/30 p-4 text-red-300">{error} <button onClick={() => fetchData()} className="underline">Retry loading reservations</button></div>}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -128,6 +131,7 @@ export default function ReservationsList() {
 
         <button
           onClick={exportSummary}
+          disabled={loading || !!error}
           className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-semibold flex items-center gap-2 transition-all shrink-0 cursor-pointer"
         >
           <Download className="w-4 h-4 text-[#2670f2]" />
@@ -153,6 +157,7 @@ export default function ReservationsList() {
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs shrink-0">
             <Building className="w-3.5 h-3.5 text-[#2670f2]" />
             <select
+              aria-label="Reservation branch"
               value={selectedBranch}
               onChange={(e) => setSelectedBranch(e.target.value)}
               className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer"
@@ -169,6 +174,7 @@ export default function ReservationsList() {
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs shrink-0">
             <Calendar className="w-3.5 h-3.5 text-[#2670f2]" />
             <select
+              aria-label="Reservation orientation"
               value={selectedOrientation}
               onChange={(e) => setSelectedOrientation(e.target.value)}
               className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer max-w-[180px] truncate"
@@ -186,6 +192,7 @@ export default function ReservationsList() {
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs shrink-0">
             <Sparkles className="w-3.5 h-3.5 text-[#2670f2]" />
             <select
+              aria-label="Reservation status"
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer"
@@ -290,6 +297,7 @@ export default function ReservationsList() {
                       {res.status !== 'Confirmed' && (
                         <button
                           onClick={() => handleStatusChange(res.id, 'Confirmed')}
+                          disabled={updatingId === res.id}
                           className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 text-[11px] font-bold transition-all cursor-pointer"
                         >
                           Confirm
@@ -299,6 +307,7 @@ export default function ReservationsList() {
                       {res.status !== 'Cancelled' && (
                         <button
                           onClick={() => handleStatusChange(res.id, 'Cancelled')}
+                          disabled={updatingId === res.id}
                           className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 text-[11px] font-bold transition-all cursor-pointer"
                         >
                           Cancel
@@ -320,6 +329,7 @@ export default function ReservationsList() {
         onClose={() => setSelectedReservationDetails(null)}
         reservation={selectedReservationDetails}
         onStatusChange={handleStatusChange}
+        saving={updatingId !== null}
       />
 
     </div>

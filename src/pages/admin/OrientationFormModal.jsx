@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/useAuth';
+import { todayInManila } from '../../../shared/reservationRules.js';
 
-export default function OrientationFormModal({ isOpen, onClose, eventToEdit, onSaved }) {
+export default function OrientationFormModal({ isOpen, onClose, eventToEdit, onSaved, initialDate = null }) {
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,22 +40,21 @@ export default function OrientationFormModal({ isOpen, onClose, eventToEdit, onS
     } else {
       setLimitedCapacity(50);
       // Set default date to next Saturday
-      const today = new Date();
-      const nextSat = new Date();
-      nextSat.setDate(today.getDate() + ((6 - today.getDay() + 7) % 7 || 7));
+      const nextSat = new Date(`${todayInManila()}T00:00:00Z`);
+      nextSat.setUTCDate(nextSat.getUTCDate() + ((6 - nextSat.getUTCDay() + 7) % 7 || 7));
       setFormData({
         title: 'FREE Saturday Cruise Career Orientation',
         branch: 'Tagum',
         venue: 'Bluechef Main Training Center, Tagum City',
         description: 'Comprehensive orientation covering cruise ship career pathways, STCW requirements, and POEA agency placement.',
-        date: nextSat.toISOString().split('T')[0],
+        date: initialDate || nextSat.toISOString().split('T')[0],
         start_time: '09:00 AM',
         end_time: '12:00 PM',
         capacity: 50,
         status: 'Published'
       });
     }
-  }, [eventToEdit, isOpen]);
+  }, [eventToEdit, isOpen, initialDate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -188,6 +188,7 @@ export default function OrientationFormModal({ isOpen, onClose, eventToEdit, onS
                   Orientation Date *
                 </label>
                 <input
+                  aria-label="Orientation date"
                   type="date"
                   required
                   value={formData.date}

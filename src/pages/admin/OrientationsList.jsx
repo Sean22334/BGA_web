@@ -1,5 +1,5 @@
 import { remainingSlots } from '../../../shared/reservationRules.js';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
@@ -19,6 +19,7 @@ import { useAuth } from '../../context/useAuth';
 import OrientationFormModal from './OrientationFormModal';
 
 import ConfirmModal from '../../components/ConfirmModal';
+import OrientationCalendar from '../../components/OrientationCalendar';
 
 export default function OrientationsList() {
   const { token } = useAuth();
@@ -26,6 +27,8 @@ export default function OrientationsList() {
 
   const [orientations, setOrientations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const requestVersion = useRef(0);
   const [search, setSearch] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -33,6 +36,8 @@ export default function OrientationsList() {
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [eventToEdit, setEventToEdit] = useState(null);
+  const [view, setView] = useState('calendar');
+  const [creationDate, setCreationDate] = useState(null);
 
   // Custom Confirmation Popup State
   const [confirmConfig, setConfirmConfig] = useState({
@@ -48,6 +53,7 @@ export default function OrientationsList() {
 
 
   const fetchOrientations = useCallback(async () => {
+    const version = ++requestVersion.current;
     setLoading(true);
     try {
       const data = await api.getOrientations({
@@ -55,11 +61,13 @@ export default function OrientationsList() {
         status: selectedStatus === 'All' ? null : selectedStatus,
         search
       });
+      if (version !== requestVersion.current) return;
+      setError('');
       setOrientations(data || []);
     } catch (err) {
-      console.error(err);
+      if (version === requestVersion.current) setError(err.message || 'Admin data could not be loaded.');
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }, [selectedBranch, selectedStatus, search]);
 
@@ -68,7 +76,8 @@ export default function OrientationsList() {
   }, [fetchOrientations]);
 
   // Actions
-  const handleOpenCreateModal = () => {
+  const handleOpenCreateModal = (date = null) => {
+    setCreationDate(typeof date === 'string' ? date : null);
     setEventToEdit(null);
     setModalOpen(true);
   };
@@ -79,6 +88,7 @@ export default function OrientationsList() {
   };
 
   const handleDuplicate = (id) => {
+    setError('');
     setConfirmConfig({
       isOpen: true,
       title: 'Duplicate Orientation Event',
@@ -90,11 +100,12 @@ export default function OrientationsList() {
         setConfirmConfig((prev) => ({ ...prev, loading: true }));
         try {
           await api.duplicateOrientation(id, token);
-          fetchOrientations();
+          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+          await fetchOrientations();
         } catch (err) {
-          console.error(err);
+          setError(err.message);
         } finally {
-          setConfirmConfig((prev) => ({ ...prev, isOpen: false, loading: false }));
+          setConfirmConfig((prev) => ({ ...prev, loading: false }));
         }
       }
     });
@@ -102,6 +113,7 @@ export default function OrientationsList() {
 
   const handleToggleClose = (id, currentStatus) => {
     const newStatus = currentStatus === 'Closed' ? 'Open' : 'Closed';
+    setError('');
     setConfirmConfig({
       isOpen: true,
       title: `${newStatus === 'Closed' ? 'Close' : 'Reopen'} Registration`,
@@ -113,17 +125,19 @@ export default function OrientationsList() {
         setConfirmConfig((prev) => ({ ...prev, loading: true }));
         try {
           await api.updateOrientationStatus(id, newStatus, token);
-          fetchOrientations();
+          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+          await fetchOrientations();
         } catch (err) {
-          console.error(err);
+          setError(err.message);
         } finally {
-          setConfirmConfig((prev) => ({ ...prev, isOpen: false, loading: false }));
+          setConfirmConfig((prev) => ({ ...prev, loading: false }));
         }
       }
     });
   };
 
   const handleDelete = (id) => {
+    setError('');
     setConfirmConfig({
       isOpen: true,
       title: 'Delete Orientation Event',
@@ -135,11 +149,12 @@ export default function OrientationsList() {
         setConfirmConfig((prev) => ({ ...prev, loading: true }));
         try {
           await api.deleteOrientation(id, token);
-          fetchOrientations();
+          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+          await fetchOrientations();
         } catch (err) {
-          console.error(err);
+          setError(err.message);
         } finally {
-          setConfirmConfig((prev) => ({ ...prev, isOpen: false, loading: false }));
+          setConfirmConfig((prev) => ({ ...prev, loading: false }));
         }
       }
     });
@@ -151,6 +166,7 @@ export default function OrientationsList() {
 
   return (
     <div className="space-y-6">
+      {error && !loading && <div role="alert" className="rounded-xl border border-red-400/30 p-4 text-red-300">{error} <button className="underline" onClick={() => fetchOrientations()}>Retry loading data</button></div>}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -194,6 +210,7 @@ export default function OrientationsList() {
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs shrink-0">
             <Building className="w-3.5 h-3.5 text-[#2670f2]" />
             <select
+              aria-label="Event branch"
               value={selectedBranch}
               onChange={(e) => setSelectedBranch(e.target.value)}
               className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer"
@@ -210,6 +227,7 @@ export default function OrientationsList() {
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs shrink-0">
             <Sparkles className="w-3.5 h-3.5 text-[#2670f2]" />
             <select
+              aria-label="Event status"
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer"
@@ -225,8 +243,10 @@ export default function OrientationsList() {
         </div>
       </div>
 
+      <div className="flex gap-3" aria-label="Schedule view"><button type="button" aria-pressed={view === 'calendar'} className="btn-secondary" onClick={() => setView('calendar')}>Calendar view</button><button type="button" aria-pressed={view === 'list'} className="btn-secondary" onClick={() => setView('list')}>List view</button></div>
+      {view === 'calendar' && <>{loading && <p role="status">Loading orientations...</p>}<OrientationCalendar events={orientations} onCreate={handleOpenCreateModal} onEdit={handleOpenEditModal} /></>}
       {/* Orientations Table */}
-      <div className="glass-panel rounded-3xl border border-white/10 overflow-hidden shadow-2xl">
+      {view === 'list' && <div className="glass-panel rounded-3xl border border-white/10 overflow-hidden shadow-2xl">
         {loading ? (
           <div className="py-20 text-center text-slate-400">
             <Loader2 className="w-8 h-8 animate-spin text-[#2670f2] mx-auto" />
@@ -356,12 +376,14 @@ export default function OrientationsList() {
         )}
       </div>
 
+      }
       {/* Modal Form */}
       <OrientationFormModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         eventToEdit={eventToEdit}
         onSaved={fetchOrientations}
+        initialDate={creationDate}
       />
 
       {/* Confirmation Popup Modal */}
@@ -369,6 +391,7 @@ export default function OrientationsList() {
         isOpen={confirmConfig.isOpen}
         onClose={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
         onConfirm={confirmConfig.onConfirm}
+        error={error}
         title={confirmConfig.title}
         message={confirmConfig.message}
         confirmText={confirmConfig.confirmText}

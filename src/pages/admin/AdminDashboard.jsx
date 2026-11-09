@@ -1,5 +1,5 @@
-import { remainingSlots, isBookableOrientation } from '../../../shared/reservationRules.js';
-import React, { useState, useEffect, useCallback } from 'react';
+import { remainingSlots, isBookableOrientation, todayInManila, orientationStartsAt } from '../../../shared/reservationRules.js';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -21,6 +21,8 @@ import { useAuth } from '../../context/useAuth';
 export default function AdminDashboard() {
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const requestVersion = useRef(0);
   const [orientations, setOrientations] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState('All');
@@ -28,6 +30,7 @@ export default function AdminDashboard() {
 
 
   const fetchDashboardData = useCallback(async (isSilent = false) => {
+    const version = ++requestVersion.current;
     if (!isSilent) setLoading(true);
     try {
       const branchFilter = selectedBranch === 'All' ? null : selectedBranch;
@@ -35,12 +38,14 @@ export default function AdminDashboard() {
         api.getOrientations({ branch: branchFilter }),
         api.getReservations(token, { branch: branchFilter })
       ]);
+      if (version !== requestVersion.current) return;
+      setError('');
       setOrientations(oList || []);
       setReservations(rList || []);
     } catch (err) {
-      console.error(err);
+      if (version === requestVersion.current) setError(err.message || 'Admin data could not be loaded.');
     } finally {
-      if (!isSilent) setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }, [token, selectedBranch]);
 
@@ -70,11 +75,11 @@ export default function AdminDashboard() {
   const confirmedCount = reservations.filter((r) => r.status === 'Confirmed').length;
   const cancelledCount = reservations.filter((r) => r.status === 'Cancelled').length;
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todaysReservationsCount = reservations.filter((r) => r.created_at && r.created_at.includes(todayStr)).length;
+  const todayStr = todayInManila();
+  const todaysReservationsCount = reservations.filter((r) => r.created_at && todayInManila(new Date(/[zZ]|[+-]\d\d:\d\d$/.test(r.created_at) ? r.created_at : r.created_at.replace(' ', 'T') + 'Z')) === todayStr).length;
 
-  const activeEvents = orientations.filter((o) => o.status === 'Open' || o.status === 'Published');
-  const upcomingCount = activeEvents.length;
+  const activeEvents = orientations.filter((o) => ['Open', 'Published'].includes(o.status) && orientationStartsAt(o) > Date.now());
+  const upcomingCount = orientations.filter((event) => ['Open', 'Published', 'Fully Booked'].includes(event.status) && orientationStartsAt(event) > Date.now()).length;
 
   const bookableEvents = orientations.filter((event) => isBookableOrientation(event));
   const availableSlots = bookableEvents.some((event) => event.capacity === null)
@@ -94,9 +99,10 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-8">
+      {error && !loading && <div role="alert" className="rounded-xl border border-red-400/30 p-4 text-red-300">{error} <button className="underline" onClick={() => fetchDashboardData()}>Retry loading data</button></div>}
 
       {/* Dashboard Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2670f2]/10 border border-[#2670f2]/30 text-[#2670f2] text-xs font-bold uppercase tracking-widest mb-2">
             <Sparkles className="w-3.5 h-3.5" />
@@ -111,10 +117,11 @@ export default function AdminDashboard() {
         </div>
 
         {/* Branch Filter & Quick CTA */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs">
             <Building className="w-4 h-4 text-[#2670f2]" />
             <select
+              aria-label="Dashboard branch"
               value={selectedBranch}
               onChange={(e) => setSelectedBranch(e.target.value)}
               className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer"
@@ -157,6 +164,7 @@ export default function AdminDashboard() {
               const Icon = card.icon;
               return (
                 <motion.div
+                  data-metric={card.title}
                   key={idx}
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -171,7 +179,7 @@ export default function AdminDashboard() {
                       <Icon className="w-4 h-4" />
                     </div>
                   </div>
-                  <div className="font-serif-luxury text-2xl sm:text-3xl font-black text-white">
+                  <div data-metric-value className="font-serif-luxury text-2xl sm:text-3xl font-black text-white">
                     {card.value}
                   </div>
                 </motion.div>

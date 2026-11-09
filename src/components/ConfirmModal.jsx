@@ -11,7 +11,8 @@ export default function ConfirmModal({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   variant = 'danger', // 'danger' | 'info' | 'warning'
-  loading = false
+  loading = false,
+  error = ''
 }) {
   if (!isOpen) return null;
 
@@ -19,7 +20,7 @@ export default function ConfirmModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+      <div role="dialog" aria-label={title} aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
         <motion.div
           initial={{ opacity: 0, scale: 0.92, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -67,6 +68,7 @@ export default function ConfirmModal({
           </div>
 
           {/* Action Buttons */}
+          {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
           <div className="flex items-center justify-center gap-3 pt-2">
             <button
               type="button"

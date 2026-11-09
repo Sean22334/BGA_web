@@ -1,10 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'node:path';
 
 const apiPort = 5505;
 const webPort = 5185;
 
 export default defineConfig({
   testDir: './tests/e2e',
+  globalTeardown: './tests/e2e/cleanup.js',
   fullyParallel: false,
   workers: 1,
   timeout: 30_000,
@@ -24,6 +26,7 @@ export default defineConfig({
       reuseExistingServer: false,
       env: {
         NODE_ENV: 'development', PORT: String(apiPort), BGA_DEV_MEMORY: 'true',
+        BGA_UPLOAD_DIR: path.resolve('test-results', 'cms-uploads'),
         JWT_SECRET: 'local-test-only-jwt-secret-32-characters',
         ADMIN_EMAIL: 'test-admin@example.com', ADMIN_PASSWORD: 'test-only-password'
       }

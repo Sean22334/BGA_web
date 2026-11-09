@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   Sparkles,
   Save,
@@ -17,6 +17,7 @@ import {
   Quote,
   GraduationCap,
   Globe,
+  Users,
   X
 } from 'lucide-react';
 import {
@@ -29,12 +30,17 @@ import {
 import { useContent } from '../../context/useContent';
 import { parseList } from '../../lib/cmsContent';
 import CmsSimpleCollection from '../../components/CmsSimpleCollection';
+import AboutSettingsExtras from '../../components/AboutSettingsExtras';
+const PublishingManager = lazy(() => import('./PublishingManager'));
+import { MAX_IMAGE_BYTES } from '../../../shared/cmsRules.js';
 
 export default function ContentManager() {
   const { refreshContent } = useContent();
   const [activeTab, setActiveTab] = useState('hero');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
+  const toastTimer = useRef(null);
   const [toast, setToast] = useState(null);
 
   // CMS State
@@ -55,12 +61,13 @@ export default function ContentManager() {
   const [uploading, setUploading] = useState(false);
 
   const showToast = (message, type = 'success') => {
+    clearTimeout(toastTimer.current);
     setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
   };
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (silent !== true) setLoading(true);
     setLoadError('');
     try {
       const data = await getAdminCMSContent();
@@ -74,9 +81,11 @@ export default function ContentManager() {
         setStats(data.stats || []);
         setPartners(data.partners || []);
       }
+      return true;
     } catch (err) {
-      setLoadError(err.message || 'Failed to load CMS data');
+      if (silent !== true) setLoadError(err.message || 'Failed to load CMS data');
       showToast(err.message || 'Failed to load CMS data', 'error');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -84,14 +93,15 @@ export default function ContentManager() {
 
   useEffect(() => {
     loadData();
+    return () => clearTimeout(toastTimer.current);
   }, []);
 
   const handleSaveSettings = async () => {
     setSaving(true);
     try {
       await updateSiteSettings(settings);
-      await refreshContent();
-      showToast('Website settings saved & published live!');
+      const refreshed = await refreshContent();
+      showToast(refreshed ? 'Website settings saved & published live!' : 'Settings saved, but the public refresh failed. Retry Sync.', refreshed ? 'success' : 'error');
     } catch (err) {
       showToast(err.message || 'Failed to save settings', 'error');
     } finally {
@@ -102,6 +112,11 @@ export default function ContentManager() {
   const handleFileUpload = async (e, onComplete) => {
     const file = e.target.files[0];
     if (!file) return;
+    e.target.value = '';
+    if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type) || file.size > MAX_IMAGE_BYTES) {
+      showToast('Choose a PNG, JPEG, GIF or WebP image, 5 MB or smaller.', 'error');
+      return;
+    }
 
     setUploading(true);
     const reader = new FileReader();
@@ -122,16 +137,21 @@ export default function ContentManager() {
 
   // CRUD Handlers
   const handleSaveItem = async (collection, item, isEdit) => {
+    if (saveLock.current) return false;
+    saveLock.current = true;
     setSaving(true);
     try {
       await saveCollectionItem(collection, item, isEdit);
-      await loadData();
-      await refreshContent();
       setActiveModal(null);
-      showToast(`${collection.slice(0, -1)} saved successfully!`);
+      const loaded = await loadData(true);
+      const refreshed = await refreshContent();
+      showToast(loaded && refreshed ? 'Content saved successfully!' : 'Content saved, but refresh failed. Retry Sync.', loaded && refreshed ? 'success' : 'error');
+      return true;
     } catch (err) {
       showToast(err.message || 'Failed to save item', 'error');
+      return false;
     } finally {
+      saveLock.current = false;
       setSaving(false);
     }
   };
@@ -141,10 +161,11 @@ export default function ContentManager() {
     setSaving(true);
     try {
       await deleteCollectionItem(deleteTarget.collection, deleteTarget.id);
-      await loadData();
-      await refreshContent();
       setDeleteTarget(null);
-      showToast('Item deleted successfully!');
+      setActiveModal(null);
+      const loaded = await loadData(true);
+      const refreshed = await refreshContent();
+      showToast(loaded && refreshed ? 'Item deleted successfully!' : 'Item deleted, but refresh failed. Retry Sync.', loaded && refreshed ? 'success' : 'error');
     } catch (err) {
       showToast(err.message || 'Failed to delete item', 'error');
     } finally {
@@ -152,11 +173,20 @@ export default function ContentManager() {
     }
   };
 
+  const publicationFields = (
+    <div className="flex flex-wrap gap-4 items-center text-sm text-slate-300">
+      <label>Display order<input type="number" min="0" value={modalItem.display_order ?? 0} onChange={(e) => setModalItem({ ...modalItem, display_order: Number(e.target.value) })} className="block w-28 p-2 rounded-xl bg-slate-950 border border-slate-700" /></label>
+      <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(modalItem.is_published)} onChange={(e) => setModalItem({ ...modalItem, is_published: e.target.checked })} />Published & Visible on Website</label>
+    </div>
+  );
+
   const tabs = [
     { id: 'hero', name: 'Hero & Branding', icon: Sparkles },
     { id: 'about', name: 'About & Mission', icon: Info },
     { id: 'programs', name: 'Programs & Courses', icon: GraduationCap },
     { id: 'branches', name: 'Branches & Locations', icon: MapPin },
+    { id: 'updates', name: 'News & Updates', icon: Globe },
+    { id: 'alumni', name: 'Alumni Album', icon: Users },
     { id: 'gallery', name: 'Campus Gallery', icon: ImageIcon },
     { id: 'testimonials', name: 'Testimonials', icon: Quote },
     { id: 'faqs', name: 'FAQs', icon: HelpCircle },
@@ -198,7 +228,12 @@ export default function ContentManager() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={loadData}
+            onClick={async () => {
+              const loaded = await loadData();
+              const refreshed = await refreshContent();
+              if (!loaded || !refreshed) showToast('Content refresh failed. Retry Sync.', 'error');
+            }}
+            disabled={saving || uploading}
             className="p-3 rounded-xl border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
             title="Reload CMS Data"
           >
@@ -210,7 +245,7 @@ export default function ContentManager() {
 
       {/* Notification Toast */}
       {toast && (
-        <div className={`p-4 rounded-2xl border flex items-center gap-3 animate-fadeIn text-sm font-medium ${
+        <div role={toast.type === 'error' ? 'alert' : 'status'} className={`${activeModal ? 'fixed top-4 left-4 right-4 z-[60]' : ''} p-4 rounded-2xl border flex items-center gap-3 animate-fadeIn text-sm font-medium ${
           toast.type === 'error' ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
         }`}>
           {toast.type === 'error' ? <AlertCircle className="w-5 h-5 shrink-0" /> : <CheckCircle2 className="w-5 h-5 shrink-0" />}
@@ -243,6 +278,8 @@ export default function ContentManager() {
       {/* ==================================================================== */}
       {/* TAB 1: HERO & BRANDING */}
       {/* ==================================================================== */}
+      {(activeTab === 'updates' || activeTab === 'alumni') && <Suspense fallback={<p role="status">Loading content manager...</p>}><PublishingManager key={activeTab} kind={activeTab} /></Suspense>}
+
       {activeTab === 'hero' && (
         <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
           <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -262,10 +299,10 @@ export default function ContentManager() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-1">
                 Top Announcement Badge Text
               </label>
-              <input
+              <input id="cms-field-1"
                 type="text"
                 value={settings.hero_badge || ''}
                 onChange={(e) => setSettings({ ...settings, hero_badge: e.target.value })}
@@ -274,10 +311,10 @@ export default function ContentManager() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-2">
                 Main Headline Text
               </label>
-              <input
+              <input id="cms-field-2"
                 type="text"
                 value={settings.hero_headline || ''}
                 onChange={(e) => setSettings({ ...settings, hero_headline: e.target.value })}
@@ -286,10 +323,10 @@ export default function ContentManager() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-3">
                 Headline Highlight Text (Gold Gradient)
               </label>
-              <input
+              <input id="cms-field-3"
                 type="text"
                 value={settings.hero_headline_highlight || ''}
                 onChange={(e) => setSettings({ ...settings, hero_headline_highlight: e.target.value })}
@@ -298,10 +335,10 @@ export default function ContentManager() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-4">
                 Primary Button CTA Text
               </label>
-              <input
+              <input id="cms-field-4"
                 type="text"
                 value={settings.hero_primary_cta_text || ''}
                 onChange={(e) => setSettings({ ...settings, hero_primary_cta_text: e.target.value })}
@@ -310,10 +347,10 @@ export default function ContentManager() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-5">
                 Subheadline Paragraph
               </label>
-              <textarea
+              <textarea id="cms-field-5"
                 rows="3"
                 value={settings.hero_subheadline || ''}
                 onChange={(e) => setSettings({ ...settings, hero_subheadline: e.target.value })}
@@ -379,10 +416,10 @@ export default function ContentManager() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-6">
                 Section Badge Title
               </label>
-              <input
+              <input id="cms-field-6"
                 type="text"
                 value={settings.about_badge || ''}
                 onChange={(e) => setSettings({ ...settings, about_badge: e.target.value })}
@@ -391,10 +428,10 @@ export default function ContentManager() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-7">
                 Section Main Headline
               </label>
-              <input
+              <input id="cms-field-7"
                 type="text"
                 value={settings.about_headline || ''}
                 onChange={(e) => setSettings({ ...settings, about_headline: e.target.value })}
@@ -403,10 +440,10 @@ export default function ContentManager() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-8">
                 Intro Paragraph
               </label>
-              <textarea
+              <textarea id="cms-field-8"
                 rows="2"
                 value={settings.about_subheadline || ''}
                 onChange={(e) => setSettings({ ...settings, about_subheadline: e.target.value })}
@@ -415,10 +452,10 @@ export default function ContentManager() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-9">
                 Our Mission Statement
               </label>
-              <textarea
+              <textarea id="cms-field-9"
                 rows="4"
                 value={settings.about_mission_desc || ''}
                 onChange={(e) => setSettings({ ...settings, about_mission_desc: e.target.value })}
@@ -427,10 +464,10 @@ export default function ContentManager() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-10">
                 Our Vision Statement
               </label>
-              <textarea
+              <textarea id="cms-field-10"
                 rows="4"
                 value={settings.about_vision_desc || ''}
                 onChange={(e) => setSettings({ ...settings, about_vision_desc: e.target.value })}
@@ -438,6 +475,7 @@ export default function ContentManager() {
               />
             </div>
           </div>
+          <AboutSettingsExtras settings={settings} setSettings={setSettings} onUpload={handleFileUpload} uploading={uploading} />
         </div>
       )}
 
@@ -463,7 +501,7 @@ export default function ContentManager() {
                   image: '/images/culinary_lab.jpg',
                   overview: '',
                   highlights: ['TESDA & USPH Compliant'],
-                  is_published: 1
+                  display_order: 0, is_published: false
                 });
                 setActiveModal('program');
               }}
@@ -476,7 +514,7 @@ export default function ContentManager() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {programs.map((prog) => (
-              <div key={prog.id} className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col justify-between space-y-4">
+              <div data-cms-item={`programs:${prog.id}`} key={prog.id} className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col justify-between space-y-4">
                 <div>
                   <div className="h-36 rounded-xl overflow-hidden mb-3 relative">
                     <img src={prog.image} alt={prog.title} className="w-full h-full object-cover" />
@@ -542,7 +580,7 @@ export default function ContentManager() {
                   map_url: '',
                   image: '/images/hero_cruise_ship.jpg',
                   features: ['Training Lab'],
-                  is_published: 1
+                  display_order: 0, is_published: false
                 });
                 setActiveModal('branch');
               }}
@@ -555,7 +593,7 @@ export default function ContentManager() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {branches.map((b) => (
-              <div key={b.id} className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
+              <div data-cms-item={`branches:${b.id}`} key={b.id} className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-white text-lg">{b.name}</h3>
                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
@@ -613,7 +651,7 @@ export default function ContentManager() {
                   title: '',
                   category: 'Training',
                   image: '/images/culinary_lab.jpg',
-                  is_published: 1
+                  display_order: 0, is_published: false
                 });
                 setActiveModal('gallery');
               }}
@@ -626,7 +664,7 @@ export default function ContentManager() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {gallery.map((item) => (
-              <div key={item.id} className="group relative h-48 rounded-2xl overflow-hidden border border-white/10 bg-slate-950">
+              <div data-cms-item={`gallery:${item.id}`} key={item.id} className="group relative h-48 rounded-2xl overflow-hidden border border-white/10 bg-slate-950">
                 <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3 flex flex-col justify-between">
                   <span className="text-[10px] uppercase font-bold text-[#2670f2] bg-slate-950/80 px-2 py-0.5 rounded self-start">
@@ -681,7 +719,7 @@ export default function ContentManager() {
                   quote: '',
                   avatar: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?auto=format&fit=crop&w=250&q=80',
                   branch_tag: 'Tagum Graduate',
-                  is_published: 1
+                  display_order: 0, is_published: false
                 });
                 setActiveModal('testimonial');
               }}
@@ -694,7 +732,7 @@ export default function ContentManager() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {testimonials.map((t) => (
-              <div key={t.id} className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3 flex flex-col justify-between">
+              <div data-cms-item={`testimonials:${t.id}`} key={t.id} className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center gap-3 mb-3">
                     <img src={t.avatar} alt={t.name} className="w-12 h-12 rounded-full object-cover border border-[#2670f2]" />
@@ -751,7 +789,7 @@ export default function ContentManager() {
                   question: '',
                   answer: '',
                   category: 'General',
-                  is_published: 1
+                  display_order: 0, is_published: false
                 });
                 setActiveModal('faq');
               }}
@@ -764,7 +802,7 @@ export default function ContentManager() {
 
           <div className="space-y-4">
             {faqs.map((f, idx) => (
-              <div key={f.id || idx} className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-start justify-between gap-4">
+              <div data-cms-item={`faqs:${f.id || idx}`} key={f.id || idx} className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-start justify-between gap-4">
                 <div className="space-y-1 flex-1">
                   <span className="text-[10px] text-[#2670f2] font-bold uppercase tracking-wider">{f.category || 'General'}</span>
                   <h4 className="font-bold text-white text-base">{f.question}</h4>
@@ -821,10 +859,10 @@ export default function ContentManager() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-11">
                 Headquarters Phone Hotline
               </label>
-              <input
+              <input id="cms-field-11"
                 type="text"
                 value={settings.contact_hotline || ''}
                 onChange={(e) => setSettings({ ...settings, contact_hotline: e.target.value })}
@@ -833,10 +871,10 @@ export default function ContentManager() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-12">
                 Official Email Address
               </label>
-              <input
+              <input id="cms-field-12"
                 type="email"
                 value={settings.contact_email || ''}
                 onChange={(e) => setSettings({ ...settings, contact_email: e.target.value })}
@@ -845,10 +883,10 @@ export default function ContentManager() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-13">
                 Official Facebook Page URL
               </label>
-              <input
+              <input id="cms-field-13"
                 type="url"
                 value={settings.contact_facebook || ''}
                 onChange={(e) => setSettings({ ...settings, contact_facebook: e.target.value })}
@@ -857,10 +895,10 @@ export default function ContentManager() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-14">
                 Business Hours Notice
               </label>
-              <input
+              <input id="cms-field-14"
                 type="text"
                 value={settings.contact_hours || ''}
                 onChange={(e) => setSettings({ ...settings, contact_hours: e.target.value })}
@@ -869,10 +907,10 @@ export default function ContentManager() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-15">
                 Google Maps Embed URL (Iframe Src)
               </label>
-              <input
+              <input id="cms-field-15"
                 type="text"
                 value={settings.contact_map_url || ''}
                 onChange={(e) => setSettings({ ...settings, contact_map_url: e.target.value })}
@@ -881,10 +919,10 @@ export default function ContentManager() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2" htmlFor="cms-field-16">
                 Footer Tagline
               </label>
-              <input
+              <input id="cms-field-16"
                 type="text"
                 value={settings.footer_tagline || ''}
                 onChange={(e) => setSettings({ ...settings, footer_tagline: e.target.value })}
@@ -899,8 +937,8 @@ export default function ContentManager() {
       {/* MODAL: PROGRAM EDITOR */}
       {/* ==================================================================== */}
       {activeModal === 'program' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 max-w-2xl w-full my-8 space-y-5">
+        <div role="dialog" aria-modal="true" aria-label={activeModal === 'delete' ? 'Delete content' : 'Content editor'} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 max-w-2xl w-full my-auto max-h-[90dvh] overflow-y-auto space-y-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white text-lg">
                 {modalItem.id ? 'Edit Program Card' : 'Create New Program'}
@@ -912,8 +950,8 @@ export default function ContentManager() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Title *</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-17">Title *</label>
+                <input id="cms-field-17"
                   type="text"
                   value={modalItem.title || ''}
                   onChange={(e) => setModalItem({ ...modalItem, title: e.target.value })}
@@ -922,8 +960,8 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Category</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-18">Category</label>
+                <input id="cms-field-18"
                   type="text"
                   value={modalItem.category || ''}
                   onChange={(e) => setModalItem({ ...modalItem, category: e.target.value })}
@@ -932,8 +970,8 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Badge Text</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-19">Badge Text</label>
+                <input id="cms-field-19"
                   type="text"
                   value={modalItem.badge || ''}
                   onChange={(e) => setModalItem({ ...modalItem, badge: e.target.value })}
@@ -942,8 +980,8 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Duration</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-20">Duration</label>
+                <input id="cms-field-20"
                   type="text"
                   value={modalItem.duration || ''}
                   onChange={(e) => setModalItem({ ...modalItem, duration: e.target.value })}
@@ -952,8 +990,8 @@ export default function ContentManager() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-300 mb-1">Eligibility</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-21">Eligibility</label>
+                <input id="cms-field-21"
                   type="text"
                   value={modalItem.eligibility || ''}
                   onChange={(e) => setModalItem({ ...modalItem, eligibility: e.target.value })}
@@ -962,8 +1000,8 @@ export default function ContentManager() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-300 mb-1">Short Description</label>
-                <textarea
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-22">Short Description</label>
+                <textarea id="cms-field-22"
                   rows="2"
                   value={modalItem.short_description || ''}
                   onChange={(e) => setModalItem({ ...modalItem, short_description: e.target.value })}
@@ -972,9 +1010,9 @@ export default function ContentManager() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-300 mb-1">Cover Image URL</label>
+                <label htmlFor="cms-image-1" className="block text-xs font-bold text-slate-300 mb-1">Cover Image URL</label>
                 <div className="flex items-center gap-2">
-                  <input
+                  <input id="cms-image-1"
                     type="text"
                     value={modalItem.image || ''}
                     onChange={(e) => setModalItem({ ...modalItem, image: e.target.value })}
@@ -994,8 +1032,8 @@ export default function ContentManager() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-300 mb-1">Full Detailed Overview</label>
-                <textarea
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-23">Full Detailed Overview</label>
+                <textarea id="cms-field-23"
                   rows="3"
                   value={modalItem.overview || ''}
                   onChange={(e) => setModalItem({ ...modalItem, overview: e.target.value })}
@@ -1003,19 +1041,10 @@ export default function ContentManager() {
                 />
               </div>
 
-              <div className="sm:col-span-2 flex items-center gap-3 pt-2">
-                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(modalItem.is_published)}
-                    onChange={(e) => setModalItem({ ...modalItem, is_published: e.target.checked ? 1 : 0 })}
-                    className="w-4 h-4 rounded text-[#2670f2]"
-                  />
-                  <span>Published & Visible on Website</span>
-                </label>
-              </div>
+
             </div>
 
+            {publicationFields}
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
               <button onClick={() => setActiveModal(null)} className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 text-xs font-bold cursor-pointer">
                 Cancel
@@ -1036,8 +1065,8 @@ export default function ContentManager() {
       {/* MODAL: BRANCH EDITOR */}
       {/* ==================================================================== */}
       {activeModal === 'branch' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 max-w-2xl w-full my-8 space-y-5">
+        <div role="dialog" aria-modal="true" aria-label={activeModal === 'delete' ? 'Delete content' : 'Content editor'} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 max-w-2xl w-full my-auto max-h-[90dvh] overflow-y-auto space-y-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white text-lg">
                 {modalItem.id ? 'Edit Branch Location' : 'Add New Branch Location'}
@@ -1049,8 +1078,8 @@ export default function ContentManager() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Branch Name *</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-24">Branch Name *</label>
+                <input id="cms-field-24"
                   type="text"
                   value={modalItem.name || ''}
                   onChange={(e) => setModalItem({ ...modalItem, name: e.target.value })}
@@ -1059,8 +1088,8 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Phone Hotlines</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-25">Phone Hotlines</label>
+                <input id="cms-field-25"
                   type="text"
                   value={modalItem.phone || ''}
                   onChange={(e) => setModalItem({ ...modalItem, phone: e.target.value })}
@@ -1069,8 +1098,8 @@ export default function ContentManager() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-300 mb-1">Full Address</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-26">Full Address</label>
+                <input id="cms-field-26"
                   type="text"
                   value={modalItem.address || ''}
                   onChange={(e) => setModalItem({ ...modalItem, address: e.target.value })}
@@ -1079,8 +1108,8 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Branch Email</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-27">Branch Email</label>
+                <input id="cms-field-27"
                   type="email"
                   value={modalItem.email || ''}
                   onChange={(e) => setModalItem({ ...modalItem, email: e.target.value })}
@@ -1089,8 +1118,8 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Business Hours</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-28">Business Hours</label>
+                <input id="cms-field-28"
                   type="text"
                   value={modalItem.hours || ''}
                   onChange={(e) => setModalItem({ ...modalItem, hours: e.target.value })}
@@ -1099,8 +1128,8 @@ export default function ContentManager() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-300 mb-1">Google Maps URL</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-29">Google Maps URL</label>
+                <input id="cms-field-29"
                   type="text"
                   value={modalItem.map_url || modalItem.mapUrl || ''}
                   onChange={(e) => setModalItem({ ...modalItem, map_url: e.target.value, mapUrl: e.target.value })}
@@ -1109,9 +1138,9 @@ export default function ContentManager() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-300 mb-1">Campus Cover Image</label>
+                <label htmlFor="cms-image-2" className="block text-xs font-bold text-slate-300 mb-1">Campus Cover Image</label>
                 <div className="flex items-center gap-2">
-                  <input
+                  <input id="cms-image-2"
                     type="text"
                     value={modalItem.image || ''}
                     onChange={(e) => setModalItem({ ...modalItem, image: e.target.value })}
@@ -1131,6 +1160,7 @@ export default function ContentManager() {
               </div>
             </div>
 
+            {publicationFields}
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
               <button onClick={() => setActiveModal(null)} className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 text-xs font-bold cursor-pointer">
                 Cancel
@@ -1151,8 +1181,8 @@ export default function ContentManager() {
       {/* MODAL: GALLERY EDITOR */}
       {/* ==================================================================== */}
       {activeModal === 'gallery' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 max-w-lg w-full space-y-4">
+        <div role="dialog" aria-modal="true" aria-label={activeModal === 'delete' ? 'Delete content' : 'Content editor'} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 max-w-lg w-full my-auto max-h-[90dvh] overflow-y-auto space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white text-lg">
                 {modalItem.id ? 'Edit Gallery Photo' : 'Upload Gallery Photo'}
@@ -1164,8 +1194,8 @@ export default function ContentManager() {
 
             <div className="space-y-4 text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Photo Title *</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-30">Photo Title *</label>
+                <input id="cms-field-30"
                   type="text"
                   value={modalItem.title || ''}
                   onChange={(e) => setModalItem({ ...modalItem, title: e.target.value })}
@@ -1174,8 +1204,8 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Category Tag</label>
-                <select
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-31">Category Tag</label>
+                <select id="cms-field-31"
                   value={modalItem.category || 'Training'}
                   onChange={(e) => setModalItem({ ...modalItem, category: e.target.value })}
                   className="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-white"
@@ -1189,9 +1219,9 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Image URL / File</label>
+                <label htmlFor="cms-image-3" className="block text-xs font-bold text-slate-300 mb-1">Image URL / File</label>
                 <div className="flex items-center gap-2">
-                  <input
+                  <input id="cms-image-3"
                     type="text"
                     value={modalItem.image || ''}
                     onChange={(e) => setModalItem({ ...modalItem, image: e.target.value })}
@@ -1211,6 +1241,7 @@ export default function ContentManager() {
               </div>
             </div>
 
+            {publicationFields}
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
               <button onClick={() => setActiveModal(null)} className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 text-xs font-bold cursor-pointer">
                 Cancel
@@ -1231,8 +1262,8 @@ export default function ContentManager() {
       {/* MODAL: TESTIMONIAL EDITOR */}
       {/* ==================================================================== */}
       {activeModal === 'testimonial' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 max-w-lg w-full space-y-4">
+        <div role="dialog" aria-modal="true" aria-label={activeModal === 'delete' ? 'Delete content' : 'Content editor'} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 max-w-lg w-full my-auto max-h-[90dvh] overflow-y-auto space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white text-lg">
                 {modalItem.id ? 'Edit Alumni Testimonial' : 'Add Alumni Testimonial'}
@@ -1244,8 +1275,8 @@ export default function ContentManager() {
 
             <div className="space-y-4 text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Alumni Name *</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-32">Alumni Name *</label>
+                <input id="cms-field-32"
                   type="text"
                   value={modalItem.name || ''}
                   onChange={(e) => setModalItem({ ...modalItem, name: e.target.value })}
@@ -1255,8 +1286,8 @@ export default function ContentManager() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-[#2670f2] mb-1">Job Role</label>
-                  <input
+                  <label className="block text-xs font-bold text-slate-[#2670f2] mb-1" htmlFor="cms-field-33">Job Role</label>
+                  <input id="cms-field-33"
                     type="text"
                     value={modalItem.role || ''}
                     onChange={(e) => setModalItem({ ...modalItem, role: e.target.value })}
@@ -1264,8 +1295,8 @@ export default function ContentManager() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-[#2670f2] mb-1">Cruise Line Company</label>
-                  <input
+                  <label className="block text-xs font-bold text-slate-[#2670f2] mb-1" htmlFor="cms-field-34">Cruise Line Company</label>
+                  <input id="cms-field-34"
                     type="text"
                     value={modalItem.company || ''}
                     onChange={(e) => setModalItem({ ...modalItem, company: e.target.value })}
@@ -1275,8 +1306,8 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Quote Statement *</label>
-                <textarea
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-35">Quote Statement *</label>
+                <textarea id="cms-field-35"
                   rows="3"
                   value={modalItem.quote || ''}
                   onChange={(e) => setModalItem({ ...modalItem, quote: e.target.value })}
@@ -1285,8 +1316,8 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Branch Tag</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-36">Branch Tag</label>
+                <input id="cms-field-36"
                   type="text"
                   value={modalItem.branch_tag || modalItem.branch || ''}
                   onChange={(e) => setModalItem({ ...modalItem, branch_tag: e.target.value, branch: e.target.value })}
@@ -1318,6 +1349,7 @@ export default function ContentManager() {
               </div>
             </div>
 
+            {publicationFields}
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
               <button onClick={() => setActiveModal(null)} className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 text-xs font-bold cursor-pointer">
                 Cancel
@@ -1338,8 +1370,8 @@ export default function ContentManager() {
       {/* MODAL: FAQ EDITOR */}
       {/* ==================================================================== */}
       {activeModal === 'faq' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 max-w-lg w-full space-y-4">
+        <div role="dialog" aria-modal="true" aria-label={activeModal === 'delete' ? 'Delete content' : 'Content editor'} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-[#2670f2]/40 max-w-lg w-full my-auto max-h-[90dvh] overflow-y-auto space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white text-lg">
                 {modalItem.id ? 'Edit FAQ Item' : 'Add FAQ Item'}
@@ -1351,8 +1383,8 @@ export default function ContentManager() {
 
             <div className="space-y-4 text-sm">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Question *</label>
-                <input
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-37">Question *</label>
+                <input id="cms-field-37"
                   type="text"
                   value={modalItem.question || ''}
                   onChange={(e) => setModalItem({ ...modalItem, question: e.target.value })}
@@ -1361,8 +1393,8 @@ export default function ContentManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Answer *</label>
-                <textarea
+                <label className="block text-xs font-bold text-slate-300 mb-1" htmlFor="cms-field-38">Answer *</label>
+                <textarea id="cms-field-38"
                   rows="4"
                   value={modalItem.answer || ''}
                   onChange={(e) => setModalItem({ ...modalItem, answer: e.target.value })}
@@ -1371,6 +1403,7 @@ export default function ContentManager() {
               </div>
             </div>
 
+            {publicationFields}
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
               <button onClick={() => setActiveModal(null)} className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 text-xs font-bold cursor-pointer">
                 Cancel
@@ -1391,7 +1424,7 @@ export default function ContentManager() {
       {/* MODAL: DELETE CONFIRMATION */}
       {/* ==================================================================== */}
       {activeModal === 'delete' && deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+        <div role="dialog" aria-modal="true" aria-label={activeModal === 'delete' ? 'Delete content' : 'Content editor'} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
           <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-rose-500/40 max-w-md w-full space-y-4 text-center">
             <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
               <AlertCircle className="w-6 h-6" />
