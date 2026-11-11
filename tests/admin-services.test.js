@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCmsApi } from '../src/services/createCmsApi.js';
-import { reservationCsv } from '../src/lib/reservationCsv.js';
+import { reservationWorkbook } from '../src/lib/reservationExcel.js';
 import { cmsPayload } from '../shared/cmsRules.js';
 
 const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP1sAAAAASUVORK5CYII=';
@@ -25,13 +25,20 @@ test('CMS payloads strip UI aliases, preserve lists, create keys and validate fi
   for (const input of [{ title: ' ' }, { title: 'Test', display_order: -1 }, { title: 'Test', highlights: 'invalid' }, { title: 'Test', image: 'javascript:alert(1)' }]) assert.throws(() => cmsPayload('programs', input));
 });
 
-test('CSV preserves Unicode, quotes, commas and multiline text and neutralizes spreadsheet formulas', () => {
-  const csv = reservationCsv([{ reference_number: 'BGA-1', full_name: 'José "Pepe", Jr.\nSecond line', phone: '09171234567', email: 'test@example.com', city: '=1+1' }]);
-  assert.ok(csv.startsWith('\uFEFFRef Code'));
-  assert.ok(csv.includes('"José ""Pepe"", Jr.\nSecond line"'));
-  assert.ok(csv.includes('"09171234567"'));
-  assert.ok(csv.includes('"\'=1+1"'));
-  assert.equal(reservationCsv([]).split('\r\n').length, 1);
+test('Excel reservation export preserves text, reservation time, orientation date and Branch filtering', () => {
+  const workbook = reservationWorkbook([
+    { reference_number: 'BGA-2', full_name: 'José "Pepe", Jr.', phone: '09171234567', email: 'test@example.com', city: 'Tagum City', orientation_branch: 'Tagum', created_at: '2026-11-10T17:25:00Z', orientation_date: '2026-11-20', status: 'Confirmed' },
+    { reference_number: 'BGA-1', full_name: 'Second applicant', phone: '09170000000', email: 'second@example.com', city: 'Bacolod City', orientation_branch: 'Bacolod', created_at: '2026-11-10T16:25:00Z', orientation_date: '2026-11-18', status: 'Pending' }
+  ]);
+  const content = new TextDecoder().decode(workbook);
+  assert.deepEqual([...workbook.slice(0, 4)], [0x50, 0x4B, 0x03, 0x04]);
+  assert.match(content, /Reservation Date/);
+  assert.match(content, /Orientation Date/);
+  assert.match(content, /<autoFilter ref="A1:I3"\/>/);
+  assert.ok(content.indexOf('Bacolod') < content.indexOf('Tagum'));
+  assert.match(content, /formatCode="yyyy-mm-dd hh:mm AM\/PM"/);
+  assert.match(content, /José &quot;Pepe&quot;, Jr\./);
+  assert.match(new TextDecoder().decode(reservationWorkbook([])), /<autoFilter ref="A1:I1"\/>/);
 });
 
 test('Supabase CMS writes use table fields and generated keys, and empty update results cannot report success', async () => {

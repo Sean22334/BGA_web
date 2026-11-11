@@ -1,4 +1,4 @@
-import { reservationCsv } from '../../lib/reservationCsv.js';
+import { reservationWorkbook } from '../../lib/reservationExcel.js';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -100,10 +100,10 @@ export default function ReservationsList() {
   };
 
   const exportSummary = () => {
-    const url = URL.createObjectURL(new Blob([reservationCsv(reservations)], { type: 'text/csv;charset=utf-8' }));
+    const url = URL.createObjectURL(new Blob([reservationWorkbook(reservations)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'bga_reservations_export_' + new Date().toISOString().slice(0, 10) + '.csv';
+    link.download = 'bga_reservations_export_' + new Date().toISOString().slice(0, 10) + '.xlsx';
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -135,7 +135,7 @@ export default function ReservationsList() {
           className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-semibold flex items-center gap-2 transition-all shrink-0 cursor-pointer"
         >
           <Download className="w-4 h-4 text-[#2670f2]" />
-          <span>Export CSV</span>
+          <span>Export Excel</span>
         </button>
       </div>
 

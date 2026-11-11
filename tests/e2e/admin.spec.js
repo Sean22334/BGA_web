@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { isBookableOrientation, remainingSlots, todayInManila, orientationStartsAt } from '../../shared/reservationRules.js';
-import { reservationCsv } from '../../src/lib/reservationCsv.js';
+import { reservationWorkbook } from '../../src/lib/reservationExcel.js';
 
 const apiBase = 'http://127.0.0.1:5505/api';
 const credentials = { email: 'test-admin@example.com', password: 'test-only-password' };
@@ -248,7 +248,7 @@ test('orientation controls create, edit, duplicate, close/reopen, filter, attend
   for (const event of remaining.filter((item) => item.title.startsWith(title))) await request.delete(`${apiBase}/orientations/${event.id}`, { headers });
 });
 
-test('reservation combined filters, details, CSV, cancellation/reactivation and dashboard counts', async ({ page, request }, testInfo) => {
+test('reservation combined filters, details, Excel export, cancellation/reactivation and dashboard counts', async ({ page, request }, testInfo) => {
   const headers = await apiLogin(request);
   const event = await createEvent(request, headers, `QA reservation ${Date.now()}`, 'Butuan', null);
   const name = `José "Pepe", QA ${testInfo.project.name}`;
@@ -281,10 +281,11 @@ test('reservation combined filters, details, CSV, cancellation/reactivation and 
   await expect(details).toContainText('Private QA note');
   await details.getByRole('button', { name: 'Close', exact: true }).click();
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export CSV' }).click();
+  await page.getByRole('button', { name: 'Export Excel' }).click();
   const file = await download;
   const filtered = await (await request.get(`${apiBase}/reservations?orientation_id=${event}&status=Confirmed&search=${booking.reference_number}`, { headers })).json();
-  expect(await readFile(await file.path(), 'utf8')).toBe(reservationCsv(filtered));
+  expect(file.suggestedFilename()).toMatch(/^bga_reservations_export_\d{4}-\d{2}-\d{2}\.xlsx$/);
+  expect(await readFile(await file.path())).toEqual(Buffer.from(reservationWorkbook(filtered)));
   await row.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(row).toHaveCount(0);
   await page.getByLabel('Reservation status').selectOption('Cancelled');
