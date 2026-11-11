@@ -145,15 +145,49 @@ export default function AboutUs() {
           <h4 className="text-[11px] uppercase tracking-[0.25em] font-bold text-slate-500 mb-8">
             OUR TRUSTED NETWORK OF EDUCATION, INDUSTRY & HEALTHCARE PARTNERS
           </h4>
-          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
-            {partners.map((partner) => (
-              <span 
-                key={typeof partner === 'string' ? partner : partner.name}
-                className="text-slate-400/80 font-bold text-sm sm:text-base tracking-wide hover:text-white transition-colors duration-300 cursor-default"
-              >
-                {typeof partner === 'string' ? partner : partner.name}
-              </span>
-            ))}
+          <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
+            {partners.map((partner, idx) => {
+              const name = typeof partner === 'string' ? partner : (partner?.name || '');
+              const logoUrl = typeof partner === 'object' ? partner?.logo_url : null;
+              const key = (typeof partner === 'object' && (partner?.id || partner?.name)) || partner || idx;
+
+              if (logoUrl) {
+                return (
+                  <div
+                    key={key}
+                    className="flex flex-col items-center justify-center p-3 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/[0.07] hover:border-[#2670f2]/40 hover:bg-white/[0.06] transition-all duration-300 group max-w-[260px] shadow-sm"
+                  >
+                    <div className="h-14 sm:h-16 w-full flex items-center justify-center p-2 rounded-xl bg-slate-950/40 border border-white/5 group-hover:border-white/10 transition-colors">
+                      <img
+                        src={logoUrl}
+                        alt={name}
+                        loading="lazy"
+                        decoding="async"
+                        className="max-h-full max-w-full object-contain filter brightness-95 group-hover:brightness-110 group-hover:scale-105 transition-all duration-300"
+                        onError={(e) => {
+                          // Hide image wrapper if image URL fails to load
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    {name && (
+                      <span className="mt-2.5 text-slate-300 font-bold text-xs sm:text-[13px] tracking-wide text-center group-hover:text-white transition-colors duration-300 line-clamp-2">
+                        {name}
+                      </span>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <span
+                  key={key}
+                  className="px-4 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.12] text-slate-400 font-bold text-xs sm:text-sm tracking-wide hover:text-white transition-all duration-300 cursor-default"
+                >
+                  {name}
+                </span>
+              );
+            })}
           </div>
         </motion.div>
 

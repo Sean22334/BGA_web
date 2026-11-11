@@ -10,12 +10,17 @@ import {
   Home,
   Loader2,
   MapPin,
-  RefreshCw,
   Search,
   Sparkles,
-  User
+  User,
+  Edit3,
+  Phone,
+  Mail,
+  FileText,
+  AlertCircle
 } from 'lucide-react';
 import { api } from '../services/api';
+import EditReservationModal from '../components/EditReservationModal';
 
 function formatDate(value) {
   if (!value) return 'To be announced';
@@ -34,6 +39,13 @@ function savedPhone(reference) {
   try { return sessionStorage.getItem(`bga_confirmation_phone:${reference}`) || ''; } catch { return ''; }
 }
 
+function savedApplicant(reference) {
+  try {
+    const raw = sessionStorage.getItem(`bga_applicant_data:${reference}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 export default function SuccessPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -45,6 +57,13 @@ export default function SuccessPage() {
     const reference = refFromUrl || initialConfirmation?.reference_number;
     return reference ? savedPhone(reference) : '';
   });
+  const [applicant, setApplicant] = useState(() => {
+    if (location.state?.applicant) return location.state.applicant;
+    const ref = refFromUrl || initialConfirmation?.reference_number;
+    return ref ? savedApplicant(ref) : null;
+  });
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [updateSuccess, setUpdateSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [lookupError, setLookupError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -53,13 +72,33 @@ export default function SuccessPage() {
     setLoading(true);
     setLookupError('');
     try {
-      const result = await api.lookupReservationConfirmation(reference.trim(), mobile.trim());
+      const [result, details] = await Promise.all([
+        api.lookupReservationConfirmation(reference.trim(), mobile.trim()),
+        api.getApplicantReservationDetails(reference.trim(), mobile.trim()).catch(() => null)
+      ]);
       if (!result) {
         setLookupError('We could not verify a reservation using those details. Check the reference number and phone, then try again.');
         return;
       }
-      try { sessionStorage.setItem(`bga_confirmation_phone:${result.reference_number}`, mobile.trim()); } catch { /* Manual recovery is still available. */ }
+      try {
+        sessionStorage.setItem(`bga_confirmation_phone:${result.reference_number}`, mobile.trim());
+      } catch { /* storage fallback */ }
       setConfirmation(result);
+      if (details) {
+        const applicantInfo = {
+          fullName: details.full_name,
+          mobileNumber: details.phone,
+          email: details.email,
+          currentAddress: details.address,
+          city: details.city,
+          province: details.province,
+          additionalNotes: details.notes
+        };
+        setApplicant(applicantInfo);
+        try {
+          sessionStorage.setItem(`bga_applicant_data:${result.reference_number}`, JSON.stringify(applicantInfo));
+        } catch { /* storage fallback */ }
+      }
       setReferenceNumber(result.reference_number);
       setSearchParams({ ref: result.reference_number }, { replace: true });
     } catch (err) {
@@ -73,15 +112,35 @@ export default function SuccessPage() {
     let active = true;
     const mobile = savedPhone(refFromUrl);
     setReferenceNumber(refFromUrl);
-    setConfirmation(null);
     setPhone(mobile);
     setLookupError('');
     if (!refFromUrl || !mobile) return;
     setLoading(true);
-    api.lookupReservationConfirmation(refFromUrl, mobile).then((result) => {
+    Promise.all([
+      api.lookupReservationConfirmation(refFromUrl, mobile),
+      api.getApplicantReservationDetails(refFromUrl, mobile).catch(() => null)
+    ]).then(([result, details]) => {
       if (!active) return;
-      if (result) setConfirmation(result);
-      else setLookupError('We could not verify a reservation using those details. Check the reference number and phone, then try again.');
+      if (result) {
+        setConfirmation(result);
+        if (details) {
+          const applicantInfo = {
+            fullName: details.full_name,
+            mobileNumber: details.phone,
+            email: details.email,
+            currentAddress: details.address,
+            city: details.city,
+            province: details.province,
+            additionalNotes: details.notes
+          };
+          setApplicant(applicantInfo);
+          try {
+            sessionStorage.setItem(`bga_applicant_data:${result.reference_number}`, JSON.stringify(applicantInfo));
+          } catch { /* storage fallback */ }
+        }
+      } else {
+        setLookupError('We could not verify a reservation using those details. Check the reference number and phone, then try again.');
+      }
     }).catch((error) => {
       if (active) setLookupError(error.message || 'Confirmation lookup is temporarily unavailable. Please try again shortly.');
     }).finally(() => { if (active) setLoading(false); });
@@ -101,6 +160,21 @@ export default function SuccessPage() {
     } catch {
       setLookupError('Copy is unavailable in this browser. Select and copy your reference number above.');
     }
+  };
+
+  const handleSaveSuccess = (updatedApplicant, updatedConfirmation) => {
+    setApplicant(updatedApplicant);
+    if (updatedConfirmation?.full_name || updatedApplicant.fullName) {
+      setConfirmation((prev) => ({
+        ...prev,
+        full_name: updatedApplicant.fullName || updatedConfirmation.full_name
+      }));
+    }
+    if (updatedApplicant.mobileNumber) {
+      setPhone(updatedApplicant.mobileNumber);
+    }
+    setUpdateSuccess('Reservation details updated successfully! Your typographical corrections have been saved.');
+    setTimeout(() => setUpdateSuccess(''), 6000);
   };
 
   if (!confirmation) {
@@ -145,6 +219,14 @@ export default function SuccessPage() {
       ? 'border-red-500/40 bg-red-500/20 text-red-300'
       : 'border-amber-400/40 bg-amber-400/15 text-amber-200';
 
+  const applicantName = applicant?.fullName || applicant?.full_name || confirmation.full_name;
+  const applicantPhone = applicant?.mobileNumber || applicant?.phone || phone;
+  const applicantEmail = applicant?.email;
+  const applicantAddress = applicant?.currentAddress || applicant?.address;
+  const applicantCity = applicant?.city;
+  const applicantProvince = applicant?.province;
+  const applicantNotes = applicant?.additionalNotes || applicant?.notes;
+
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050D1A] px-4 pb-20 pt-28 text-slate-100">
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[800px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2670f2]/10 blur-[180px]" />
@@ -155,7 +237,7 @@ export default function SuccessPage() {
 
           <div>
             <span className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 text-xs font-bold uppercase tracking-wider ${statusClasses}`}><Sparkles className="h-3.5 w-3.5" />Reservation {status}</span>
-            <h1 className="mt-4 text-3xl font-black text-white sm:text-4xl">Thank You, <span className="text-gold-gradient">{confirmation.full_name}</span>!</h1>
+            <h1 className="mt-4 text-3xl font-black text-white sm:text-4xl">Thank You, <span className="text-gold-gradient">{applicantName}</span>!</h1>
             <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">{status === 'Confirmed' ? 'Your slot is confirmed. Keep your reference number and arrive at the scheduled date, time, and venue.' : status === 'Cancelled' ? 'This reservation has been cancelled. Contact Admissions if you need assistance.' : 'Keep your reference number. Contact Admissions regarding this existing pending reservation.'}</p>
           </div>
 
@@ -164,15 +246,28 @@ export default function SuccessPage() {
               <div className="text-[10px] font-bold uppercase tracking-widest text-[#70A6FF]">Reservation Reference Number</div>
               <div className="mt-1 break-all font-mono text-lg font-black tracking-wide text-white sm:text-xl">{confirmation.reference_number}</div>
             </div>
-            <button onClick={copyRefNumber} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white/10 p-2.5 text-xs font-semibold text-white transition hover:bg-white/20">
+            <button onClick={copyRefNumber} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white/10 p-2.5 text-xs font-semibold text-white transition hover:bg-white/20 cursor-pointer">
               {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4 text-[#70A6FF]" />}{copied ? 'Copied!' : 'Copy Code'}
             </button>
           </div>
 
+          {updateSuccess && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/15 text-emerald-200 text-sm flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+              <span>{updateSuccess}</span>
+            </motion.div>
+          )}
+
           {lookupError && <p role="alert" className="text-sm text-amber-200">{lookupError}</p>}
+
+          {/* Orientation Summary */}
           <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-6 text-left shadow-inner sm:p-8">
             <div className="flex flex-col justify-between gap-2 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
-              <h2 className="flex items-center gap-2 text-lg font-bold text-white"><User className="h-4 w-4 text-[#70A6FF]" /> Orientation Summary</h2>
+              <h2 className="flex items-center gap-2 text-lg font-bold text-white"><Award className="h-5 w-5 text-[#70A6FF]" /> Orientation Summary</h2>
               <span className="text-xs text-slate-400">{formatSubmittedAt(confirmation.submitted_at)}</span>
             </div>
             <div className="mt-5 grid grid-cols-1 gap-5 text-sm sm:grid-cols-2">
@@ -183,12 +278,107 @@ export default function SuccessPage() {
             </div>
           </div>
 
-          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link to="/" className="btn-primary w-full justify-center sm:w-auto"><Home className="h-4 w-4" /> Return Home</Link>
-            <Link to="/reserve" className="btn-secondary w-full justify-center sm:w-auto"><RefreshCw className="h-4 w-4 text-[#70A6FF]" /> Reserve Another Slot</Link>
+          {/* Applicant Information & Edit Button */}
+          <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-6 text-left shadow-inner sm:p-8">
+            <div className="flex flex-col justify-between gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+                  <User className="h-5 w-5 text-[#70A6FF]" />
+                  Applicant & Contact Information
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Review the details you entered. If there are any typographical errors, click Edit below.
+                </p>
+              </div>
+
+              {status !== 'Cancelled' && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2670f2]/15 border border-[#2670f2]/30 text-[#70A6FF] hover:bg-[#2670f2]/30 hover:text-white transition-all text-xs font-bold cursor-pointer shrink-0 shadow-sm"
+                >
+                  <Edit3 className="h-4 w-4" />
+                  Edit Information
+                </button>
+              )}
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-5 text-sm sm:grid-cols-2">
+              <div className="flex items-start gap-3">
+                <User className="mt-0.5 h-4 w-4 shrink-0 text-[#70A6FF]" />
+                <div>
+                  <div className="text-xs text-slate-400">Full Name</div>
+                  <div className="font-bold text-white text-base">{applicantName}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Phone className="mt-0.5 h-4 w-4 shrink-0 text-[#70A6FF]" />
+                <div>
+                  <div className="text-xs text-slate-400">Contact Number</div>
+                  <div className="font-semibold text-white">{applicantPhone || '—'}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#70A6FF]" />
+                <div>
+                  <div className="text-xs text-slate-400">Email Address</div>
+                  <div className="font-semibold text-white break-all">{applicantEmail || '—'}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#70A6FF]" />
+                <div>
+                  <div className="text-xs text-slate-400">Address & Location</div>
+                  <div className="font-semibold text-white">
+                    {applicantAddress ? `${applicantAddress}, ${applicantCity || ''}, ${applicantProvince || ''}` : '—'}
+                  </div>
+                </div>
+              </div>
+
+              {applicantNotes && (
+                <div className="flex items-start gap-3 sm:col-span-2">
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#70A6FF]" />
+                  <div>
+                    <div className="text-xs text-slate-400">Additional Notes / Inquiries</div>
+                    <div className="text-slate-300 italic text-xs mt-0.5">"{applicantNotes}"</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row pt-2">
+            <Link to="/" className="btn-primary w-full justify-center sm:w-auto">
+              <Home className="h-4 w-4" /> Return Home
+            </Link>
+
+            {status !== 'Cancelled' && (
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(true)}
+                className="btn-secondary w-full justify-center sm:w-auto cursor-pointer"
+              >
+                <Edit3 className="h-4 w-4 text-[#70A6FF]" />
+                Review & Edit Information
+              </button>
+            )}
           </div>
         </motion.div>
       </div>
+
+      {/* Edit Reservation Modal */}
+      <EditReservationModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        initialData={applicant || { fullName: confirmation.full_name, mobileNumber: phone }}
+        referenceNumber={confirmation.reference_number}
+        currentPhone={phone || applicant?.mobileNumber || applicant?.phone}
+        onSaveSuccess={handleSaveSuccess}
+      />
     </main>
   );
 }

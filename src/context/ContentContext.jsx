@@ -77,8 +77,7 @@ export function ContentProvider({ children }) {
         if (data.testimonials) setTestimonials(data.testimonials);
         if (data.faqs) setFaqs(data.faqs);
         if (data.partners) {
-          const partnerNames = data.partners.map((p) => typeof p === 'string' ? p : p.name);
-          setPartners(partnerNames);
+          setPartners(data.partners);
         }
         setError(null);
         return true;

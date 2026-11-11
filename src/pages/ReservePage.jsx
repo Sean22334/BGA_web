@@ -206,14 +206,28 @@ export default function ReservePage() {
         submitted_at: new Date().toISOString()
       };
 
-      try { sessionStorage.setItem(`bga_confirmation_phone:${generatedRef}`, data.mobileNumber); } catch { /* Reference + phone lookup remains available if browser storage is blocked. */ }
+      const applicant = {
+        fullName: data.fullName,
+        mobileNumber: data.mobileNumber,
+        email: data.email,
+        currentAddress: data.currentAddress,
+        city: data.city,
+        province: data.province,
+        additionalNotes: data.additionalNotes || ''
+      };
+
+      try {
+        sessionStorage.setItem(`bga_confirmation_phone:${generatedRef}`, data.mobileNumber);
+        sessionStorage.setItem(`bga_applicant_data:${generatedRef}`, JSON.stringify(applicant));
+      } catch { /* Reference + phone lookup remains available if browser storage is blocked. */ }
       setIsSubmitting(false);
       handleCloseBookingModal();
 
       // Redirect to Success Page
       navigate(`/success?ref=${encodeURIComponent(generatedRef)}`, {
         state: {
-          confirmation
+          confirmation,
+          applicant
         }
       });
     } catch (err) {
@@ -736,9 +750,22 @@ export default function ReservePage() {
               </div>
 
               {bookingError && (
-                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{bookingError}</span>
+                <div className="mb-4 p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-medium space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                    <span className="leading-relaxed">{bookingError}</span>
+                  </div>
+                  {bookingError.toLowerCase().includes('already') && (
+                    <div className="pl-6">
+                      <button
+                        type="button"
+                        onClick={() => navigate('/success')}
+                        className="text-[#70A6FF] hover:text-white underline font-bold transition-colors cursor-pointer"
+                      >
+                        Review or edit your existing reservation &rarr;
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

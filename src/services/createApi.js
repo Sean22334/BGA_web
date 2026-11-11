@@ -33,7 +33,7 @@ function queryString(filters) {
 }
 
 function serviceError(error) {
-  if (error?.code === '23505') return new Error('A reservation already exists for this schedule using this email or phone number.');
+  if (error?.code === '23505') return new Error(error.message || 'You already have an active reservation under this email or phone number. Each applicant is allowed one active reservation to prevent duplicate bookings.');
   if (['P0001', 'P0002', '22023', '23514'].includes(error?.code)) return new Error(error.message);
   if (error?.code === '42501') return new Error('Administrator access is required. Please sign in again.');
   return unavailable();
@@ -155,6 +155,67 @@ export function createApi({ supabase = null, development = false, baseUrl = '/ap
         p_reference_number: referenceNumber.trim(), p_phone: phone.trim()
       }));
       return normalizeConfirmation(rows?.[0]);
+    },
+
+    async getApplicantReservationDetails(referenceNumber, phone) {
+      if (!supabase) {
+        return local('/reservations/applicant-details', {
+          method: 'POST', body: { reference_number: referenceNumber.trim(), phone: phone.trim() }, optional: true
+        });
+      }
+      const rows = await remote(() => supabase.from('reservations').select('*, orientations!inner(title, branch, venue, date, start_time, end_time)')
+        .eq('reference_number', referenceNumber.trim()).limit(1));
+      const res = rows?.[0];
+      if (!res) return null;
+      return {
+        reference_number: res.reference_number,
+        full_name: res.full_name,
+        phone: res.phone,
+        email: res.email,
+        address: res.address,
+        city: res.city,
+        province: res.province,
+        notes: res.notes,
+        status: res.status,
+        orientation_id: res.orientation_id,
+        orientation_title: res.orientations?.title,
+        orientation_branch: res.orientations?.branch,
+        orientation_venue: res.orientations?.venue,
+        orientation_date: res.orientations?.date,
+        orientation_start_time: res.orientations?.start_time,
+        orientation_end_time: res.orientations?.end_time,
+        submitted_at: res.created_at
+      };
+    },
+
+    async updateApplicantReservation(payload) {
+      if (!supabase) {
+        return local('/reservations/applicant-update', { method: 'PATCH', body: payload });
+      }
+      const rows = await remote(() => supabase.rpc('update_applicant_reservation', {
+        p_reference_number: payload.reference_number.trim(),
+        p_current_phone: payload.phone.trim(),
+        p_full_name: payload.full_name.trim(),
+        p_phone: (payload.new_phone || payload.phone).trim(),
+        p_email: payload.email.trim(),
+        p_address: payload.address.trim(),
+        p_city: payload.city.trim(),
+        p_province: payload.province.trim(),
+        p_notes: payload.notes || ''
+      }));
+      const confirmation = normalizeConfirmation(rows?.[0]);
+      return {
+        message: 'Reservation details updated successfully.',
+        reservation: {
+          ...confirmation,
+          phone: payload.new_phone || payload.phone,
+          email: payload.email,
+          address: payload.address,
+          city: payload.city,
+          province: payload.province,
+          notes: payload.notes
+        }
+      };
     },
 
     async getReservations(token, filters = {}) {

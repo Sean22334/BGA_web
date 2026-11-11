@@ -21,20 +21,57 @@ export default function CmsSimpleCollection({ collection, items, saving, onSave,
         <button type="button" onClick={() => setDraft(emptyItem)} className="btn-primary">Add {collection === 'stats' ? 'statistic' : 'partner'}</button>
       </div>
       {draft && (
-        <form onSubmit={async (event) => { event.preventDefault(); if (await onSave(collection, draft, !!draft.id)) setDraft(null); }} className="grid sm:grid-cols-2 gap-4 border border-slate-700 rounded-2xl p-5">
+        <form onSubmit={async (event) => { event.preventDefault(); if (await onSave(collection, draft, !!draft.id)) setDraft(null); }} className="grid sm:grid-cols-2 gap-4 border border-slate-700 rounded-2xl p-5 bg-slate-900/40">
           {FIELDS[collection].map(([field, label, type]) => (
-            <label key={field} className="text-sm text-slate-300">{label}<input type={type} required={field !== 'logo_url'} value={draft[field] || ''} onChange={(event) => setDraft({ ...draft, [field]: event.target.value })} className="mt-1 block w-full rounded-xl bg-slate-950 border border-slate-600 p-3 text-white" /></label>
+            <div key={field} className="space-y-1">
+              <label className="text-sm text-slate-300">{label}</label>
+              <input
+                type={type}
+                required={field !== 'logo_url'}
+                value={draft[field] || ''}
+                onChange={(event) => setDraft({ ...draft, [field]: event.target.value })}
+                className="block w-full rounded-xl bg-slate-950 border border-slate-600 p-3 text-white focus:border-[#2670f2] outline-none transition"
+              />
+              {field === 'logo_url' && draft.logo_url && (
+                <div className="mt-2 p-2 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center p-1 overflow-hidden shrink-0">
+                    <img
+                      src={draft.logo_url}
+                      alt="Logo preview"
+                      className="max-h-full max-w-full object-contain"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </div>
+                  <span className="text-xs text-slate-400">Logo preview</span>
+                </div>
+              )}
+            </div>
           ))}
-          <label className="text-sm text-slate-300">Display order<input type="number" min="0" value={draft.display_order ?? 0} onChange={(event) => setDraft({ ...draft, display_order: Number(event.target.value) })} className="mt-1 block w-full rounded-xl bg-slate-950 border border-slate-600 p-3 text-white" /></label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!draft.is_published} onChange={(event) => setDraft({ ...draft, is_published: event.target.checked })} /> Published</label>
-          <div className="flex gap-3"><button disabled={saving} type="submit" className="btn-primary disabled:opacity-50">{saving ? 'Saving...' : 'Save'}</button><button type="button" onClick={() => setDraft(null)} className="btn-secondary">Close editor</button></div>
+          <label className="text-sm text-slate-300">Display order<input type="number" min="0" value={draft.display_order ?? 0} onChange={(event) => setDraft({ ...draft, display_order: Number(event.target.value) })} className="mt-1 block w-full rounded-xl bg-slate-950 border border-slate-600 p-3 text-white focus:border-[#2670f2] outline-none transition" /></label>
+          <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={!!draft.is_published} onChange={(event) => setDraft({ ...draft, is_published: event.target.checked })} className="rounded accent-[#2670f2]" /> Published</label>
+          <div className="flex gap-3 sm:col-span-2 pt-2"><button disabled={saving} type="submit" className="btn-primary disabled:opacity-50">{saving ? 'Saving...' : 'Save'}</button><button type="button" onClick={() => setDraft(null)} className="btn-secondary">Close editor</button></div>
         </form>
       )}
       {items.length === 0 && <p className="text-slate-400">No {collection} configured.</p>}
       {items.map((item) => (
-        <div data-cms-item={`${collection}:${item.id}`} key={item.id} className="flex flex-wrap items-center justify-between gap-3 border border-slate-800 rounded-xl p-4">
-          <div><p className="font-semibold text-white">{collection === 'stats' ? `${item.value} ${item.label}` : item.name}</p><p className="text-xs text-slate-400">{item.is_published ? 'Published' : 'Draft'} · Order {item.display_order || 0}</p></div>
-          <div className="flex gap-3"><button type="button" onClick={() => setDraft({ ...item })} className="text-sm text-[#70a6ff]">Edit</button><button type="button" disabled={saving} onClick={() => onDelete(item)} className="text-sm text-red-300">Delete</button></div>
+        <div data-cms-item={`${collection}:${item.id}`} key={item.id} className="flex flex-wrap items-center justify-between gap-3 border border-slate-800 rounded-xl p-4 bg-slate-900/20 hover:bg-slate-900/40 transition">
+          <div className="flex items-center gap-3">
+            {collection === 'partners' && item.logo_url && (
+              <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center p-1 overflow-hidden shrink-0">
+                <img
+                  src={item.logo_url}
+                  alt={item.name}
+                  className="max-h-full max-w-full object-contain"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              </div>
+            )}
+            <div>
+              <p className="font-semibold text-white">{collection === 'stats' ? `${item.value} ${item.label}` : item.name}</p>
+              <p className="text-xs text-slate-400">{item.is_published ? 'Published' : 'Draft'} · Order {item.display_order || 0}</p>
+            </div>
+          </div>
+          <div className="flex gap-3"><button type="button" onClick={() => setDraft({ ...item })} className="text-sm font-semibold text-[#70a6ff] hover:underline">Edit</button><button type="button" disabled={saving} onClick={() => onDelete(item)} className="text-sm text-red-300 hover:underline">Delete</button></div>
         </div>
       ))}
     </section>

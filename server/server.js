@@ -10,7 +10,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createDevelopmentData } from '../shared/developmentData.js';
 import { isBookableOrientation, normalizePhone, remainingSlots, todayInManila } from '../shared/reservationRules.js';
-import { bookMySql, changeMySqlReservationStatus, newReference, ORIENTATION_STATUSES, passwordMatches, ReservationError, seatChange, updateMySqlOrientation, validateApplicant, validateOrientation } from './reservationDomain.js';
+import { bookMySql, changeMySqlReservationStatus, newReference, ORIENTATION_STATUSES, passwordMatches, ReservationError, seatChange, updateApplicantReservationMySql, updateMySqlOrientation, validateApplicant, validateOrientation } from './reservationDomain.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -711,13 +711,13 @@ app.post('/api/reservations', async (req, res) => {
     const existingDuplicate = mockReservations.find(
       (r) =>
         (r.email.toLowerCase() === email.trim().toLowerCase() || normalizePhone(r.phone) === normalizePhone(phone)) &&
-        r.orientation_id === parseInt(orientation_id) &&
+
         r.status !== 'Cancelled'
     );
 
     if (existingDuplicate) {
       return res.status(409).json({
-        error: 'You have already submitted a reservation for this orientation session using this email or phone number.'
+        error: 'You already have an active reservation under this email or phone number. Each applicant is allowed one active reservation to prevent duplicate bookings.'
       });
     }
 
@@ -807,6 +807,163 @@ app.post('/api/reservations/confirmation', async (req, res) => {
   const orientation = mockOrientations.find((item) => item.id === reservation.orientation_id);
   if (!orientation) return res.status(404).json({ error: 'Reservation not found.' });
   return res.json(toConfirmation(reservation, orientation));
+});
+
+// Applicant details lookup for review & edit (requires reference number + phone)
+app.post('/api/reservations/applicant-details', async (req, res) => {
+  const { reference_number, phone } = req.body || {};
+  res.set('Cache-Control', 'no-store');
+  if (typeof reference_number !== 'string' || !reference_number.trim() || reference_number.length > 50 || typeof phone !== 'string' || !/^\d{10,15}$/.test(normalizePhone(phone))) {
+    return res.status(400).json({ error: 'Reference number and phone are required.' });
+  }
+
+  if (isDbConnected) {
+    try {
+      const [rows] = await pool.query(
+        `SELECT
+          r.reference_number,
+          r.full_name,
+          r.phone,
+          r.email,
+          r.address,
+          r.city,
+          r.province,
+          r.notes,
+          r.status AS reservation_status,
+          o.id AS orientation_id,
+          o.title AS orientation_title,
+          o.branch AS orientation_branch,
+          o.venue AS orientation_venue,
+          o.date AS orientation_date,
+          o.start_time AS orientation_start_time,
+          o.end_time AS orientation_end_time,
+          r.created_at AS submitted_at
+        FROM reservations r
+        JOIN orientations o ON o.id = r.orientation_id
+        WHERE UPPER(r.reference_number) = UPPER(?)
+          AND REGEXP_REPLACE(r.phone, '[^0-9]', '') = ?
+        LIMIT 1`,
+        [reference_number.trim(), normalizePhone(phone)]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: 'Reservation not found.' });
+      return res.json(rows[0]);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Unable to retrieve reservation details.' });
+    }
+  }
+
+  const reservation = mockReservations.find(
+    (item) =>
+      item.reference_number.toLowerCase() === reference_number.trim().toLowerCase() &&
+      normalizePhone(item.phone) === normalizePhone(phone)
+  );
+  if (!reservation) return res.status(404).json({ error: 'Reservation not found.' });
+  const orientation = mockOrientations.find((item) => item.id === reservation.orientation_id);
+  if (!orientation) return res.status(404).json({ error: 'Reservation not found.' });
+  return res.json({
+    reference_number: reservation.reference_number,
+    full_name: reservation.full_name,
+    phone: reservation.phone,
+    email: reservation.email,
+    address: reservation.address,
+    city: reservation.city,
+    province: reservation.province,
+    notes: reservation.notes,
+    reservation_status: reservation.status,
+    orientation_id: orientation.id,
+    orientation_title: orientation.title,
+    orientation_branch: orientation.branch,
+    orientation_venue: orientation.venue,
+    orientation_date: orientation.date,
+    orientation_start_time: orientation.start_time,
+    orientation_end_time: orientation.end_time,
+    submitted_at: reservation.created_at
+  });
+});
+
+// Applicant update endpoint for correcting typographical errors
+app.patch('/api/reservations/applicant-update', async (req, res) => {
+  const { reference_number, phone } = req.body || {};
+  res.set('Cache-Control', 'no-store');
+  if (typeof reference_number !== 'string' || !reference_number.trim() || typeof phone !== 'string' || !/^\d{10,15}$/.test(normalizePhone(phone))) {
+    return res.status(400).json({ error: 'Reference number and current phone number are required.' });
+  }
+
+  if (isDbConnected) {
+    try {
+      const updated = await updateApplicantReservationMySql(pool, req.body);
+      return res.json({ message: 'Reservation details updated successfully.', reservation: updated });
+    } catch (err) {
+      if (err instanceof ReservationError) return res.status(err.status).json({ error: err.message });
+      console.error(err);
+      return res.status(500).json({ error: 'Unable to update reservation details.' });
+    }
+  }
+
+  const reservation = mockReservations.find(
+    (item) =>
+      item.reference_number.toLowerCase() === reference_number.trim().toLowerCase() &&
+      normalizePhone(item.phone) === normalizePhone(phone)
+  );
+  if (!reservation) return res.status(404).json({ error: 'Reservation not found or phone number does not match.' });
+  if (reservation.status === 'Cancelled') return res.status(400).json({ error: 'Cancelled reservations cannot be edited.' });
+
+  let validated;
+  try {
+    validated = validateApplicant({
+      orientation_id: reservation.orientation_id,
+      full_name: req.body.full_name ?? reservation.full_name,
+      phone: req.body.new_phone || req.body.phone || reservation.phone,
+      email: req.body.email ?? reservation.email,
+      address: req.body.address ?? reservation.address,
+      city: req.body.city ?? reservation.city,
+      province: req.body.province ?? reservation.province,
+      notes: req.body.notes !== undefined ? req.body.notes : reservation.notes
+    });
+  } catch (err) {
+    return res.status(err.status || 400).json({ error: err.message });
+  }
+
+  const duplicate = mockReservations.find(
+    (r) =>
+      r.id !== reservation.id &&
+      r.status !== 'Cancelled' &&
+      (r.email.toLowerCase() === validated.email.toLowerCase() || normalizePhone(r.phone) === normalizePhone(validated.phone))
+  );
+  if (duplicate) {
+    return res.status(409).json({ error: 'Another active reservation already exists under this email or phone number.' });
+  }
+
+  reservation.full_name = validated.full_name;
+  reservation.phone = validated.phone;
+  reservation.email = validated.email;
+  reservation.address = validated.address;
+  reservation.city = validated.city;
+  reservation.province = validated.province;
+  reservation.notes = validated.notes;
+
+  const orientation = mockOrientations.find((o) => o.id === reservation.orientation_id);
+  const updatedConfirmation = {
+    reference_number: reservation.reference_number,
+    full_name: reservation.full_name,
+    phone: reservation.phone,
+    email: reservation.email,
+    address: reservation.address,
+    city: reservation.city,
+    province: reservation.province,
+    notes: reservation.notes,
+    reservation_status: reservation.status,
+    orientation_title: orientation?.title || '',
+    orientation_branch: orientation?.branch || '',
+    orientation_venue: orientation?.venue || '',
+    orientation_date: orientation?.date || '',
+    orientation_start_time: orientation?.start_time || '',
+    orientation_end_time: orientation?.end_time || '',
+    submitted_at: reservation.created_at
+  };
+
+  return res.json({ message: 'Reservation details updated successfully.', reservation: updatedConfirmation });
 });
 
 // Get All Reservations (Admin Filter & Search)

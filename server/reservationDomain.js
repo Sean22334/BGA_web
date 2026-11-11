@@ -91,11 +91,16 @@ async function transaction(pool, operation) {
 
 async function rejectDuplicate(connection, applicant, excludedId = 0) {
   const [duplicates] = await connection.query(
-    `SELECT id FROM reservations WHERE orientation_id = ? AND id <> ? AND status <> 'Cancelled'
+    `SELECT id, reference_number FROM reservations WHERE id <> ? AND status <> 'Cancelled'
       AND (LOWER(TRIM(email)) = ? OR REGEXP_REPLACE(phone, '[^0-9]', '') = ?) LIMIT 1 FOR UPDATE`,
-    [applicant.orientation_id, excludedId, applicant.email.trim().toLowerCase(), normalizePhone(applicant.phone)]
+    [excludedId, applicant.email.trim().toLowerCase(), normalizePhone(applicant.phone)]
   );
-  if (duplicates.length) throw new ReservationError(409, 'You have already submitted a reservation for this orientation session using this email or phone number.');
+  if (duplicates.length) {
+    throw new ReservationError(
+      409,
+      'You already have an active reservation under this email or phone number. Each applicant is allowed one active reservation to prevent duplicate bookings.'
+    );
+  }
 }
 
 export async function bookMySql(pool, applicant) {
@@ -142,5 +147,65 @@ export async function updateMySqlOrientation(pool, id, input) {
     await connection.query('UPDATE orientations SET title=?, branch=?, venue=?, description=?, date=?, start_time=?, end_time=?, capacity=?, status=? WHERE id=?',
       [orientation.title, orientation.branch, orientation.venue, orientation.description || '', orientation.date, orientation.start_time, orientation.end_time || '', orientation.capacity, orientation.status, id]);
     return { message: 'Orientation updated successfully', orientation };
+  });
+}
+
+export async function updateApplicantReservationMySql(pool, data) {
+  return transaction(pool, async (connection) => {
+    const [reservations] = await connection.query(
+      `SELECT r.*, o.title AS orientation_title, o.branch AS orientation_branch, o.venue AS orientation_venue,
+              o.date AS orientation_date, o.start_time AS orientation_start_time, o.end_time AS orientation_end_time
+       FROM reservations r
+       JOIN orientations o ON o.id = r.orientation_id
+       WHERE UPPER(r.reference_number) = UPPER(?)
+         AND REGEXP_REPLACE(r.phone, '[^0-9]', '') = ?
+       LIMIT 1 FOR UPDATE`,
+      [data.reference_number.trim(), normalizePhone(data.phone)]
+    );
+    if (!reservations.length) throw new ReservationError(404, 'Reservation not found or phone number does not match.');
+    const reservation = reservations[0];
+    if (reservation.status === 'Cancelled') throw new ReservationError(400, 'Cancelled reservations cannot be edited.');
+
+    const newPhone = data.new_phone || data.phone;
+    const applicant = {
+      orientation_id: reservation.orientation_id,
+      full_name: data.full_name,
+      phone: newPhone,
+      email: data.email,
+      address: data.address,
+      city: data.city,
+      province: data.province,
+      notes: data.notes
+    };
+    const validated = validateApplicant(applicant);
+
+    // Check duplicate against other active reservations
+    await rejectDuplicate(connection, validated, reservation.id);
+
+    await connection.query(
+      `UPDATE reservations
+       SET full_name = ?, phone = ?, email = ?, address = ?, city = ?, province = ?, notes = ?
+       WHERE id = ?`,
+      [validated.full_name, validated.phone, validated.email, validated.address, validated.city, validated.province, validated.notes, reservation.id]
+    );
+
+    return {
+      reference_number: reservation.reference_number,
+      full_name: validated.full_name,
+      phone: validated.phone,
+      email: validated.email,
+      address: validated.address,
+      city: validated.city,
+      province: validated.province,
+      notes: validated.notes,
+      reservation_status: reservation.status,
+      orientation_title: reservation.orientation_title,
+      orientation_branch: reservation.orientation_branch,
+      orientation_venue: reservation.orientation_venue,
+      orientation_date: reservation.orientation_date,
+      orientation_start_time: reservation.orientation_start_time,
+      orientation_end_time: reservation.orientation_end_time,
+      submitted_at: reservation.created_at
+    };
   });
 }
