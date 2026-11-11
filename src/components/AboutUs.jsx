@@ -142,10 +142,10 @@ export default function AboutUs() {
 
         {/* Industry Partners Bar */}
         <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.2 }} className="mt-24 text-center">
-          <h4 className="text-[11px] uppercase tracking-[0.25em] font-bold text-slate-500 mb-8">
+          <h4 className="text-[11px] uppercase tracking-[0.25em] font-bold text-slate-500 mb-10">
             OUR TRUSTED NETWORK OF EDUCATION, INDUSTRY & HEALTHCARE PARTNERS
           </h4>
-          <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
+          <div className="flex flex-wrap items-center justify-center gap-10 sm:gap-14 md:gap-16">
             {partners.map((partner, idx) => {
               const name = typeof partner === 'string' ? partner : (partner?.name || '');
               const logoUrl = typeof partner === 'object' ? partner?.logo_url : null;
@@ -155,26 +155,26 @@ export default function AboutUs() {
                 return (
                   <div
                     key={key}
-                    className="flex flex-col items-center justify-center p-3 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/[0.07] hover:border-[#2670f2]/40 hover:bg-white/[0.06] transition-all duration-300 group max-w-[260px] shadow-sm"
+                    className="flex flex-col items-center justify-center gap-3.5 group cursor-default"
                   >
-                    <div className="h-14 sm:h-16 w-full flex items-center justify-center p-2 rounded-xl bg-slate-950/40 border border-white/5 group-hover:border-white/10 transition-colors">
-                      <img
-                        src={logoUrl}
-                        alt={name}
-                        loading="lazy"
-                        decoding="async"
-                        className="max-h-full max-w-full object-contain filter brightness-95 group-hover:brightness-110 group-hover:scale-105 transition-all duration-300"
-                        onError={(e) => {
-                          // Hide image wrapper if image URL fails to load
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    </div>
+                    {/* Title on the top */}
                     {name && (
-                      <span className="mt-2.5 text-slate-300 font-bold text-xs sm:text-[13px] tracking-wide text-center group-hover:text-white transition-colors duration-300 line-clamp-2">
+                      <span className="text-slate-300 font-bold text-xs sm:text-sm tracking-wide text-center max-w-[260px] leading-snug group-hover:text-white transition-colors duration-300">
                         {name}
                       </span>
                     )}
+
+                    {/* Larger Logo below without any box */}
+                    <img
+                      src={logoUrl}
+                      alt={name}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-24 sm:h-28 md:h-32 w-auto max-w-[220px] sm:max-w-[280px] object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
                   </div>
                 );
               }
@@ -182,7 +182,7 @@ export default function AboutUs() {
               return (
                 <span
                   key={key}
-                  className="px-4 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.12] text-slate-400 font-bold text-xs sm:text-sm tracking-wide hover:text-white transition-all duration-300 cursor-default"
+                  className="text-slate-400/80 font-bold text-sm sm:text-base tracking-wide hover:text-white transition-colors duration-300 cursor-default"
                 >
                   {name}
                 </span>
