@@ -18,10 +18,6 @@ export default function Hero() {
     Anchor: Anchor
   };
 
-  const trustBadges = Array.isArray(settings.hero_trust_badges)
-    ? settings.hero_trust_badges
-    : ['100% Free Career Orientation', 'Zero Prior Experience Required', 'POEA Manning Agency Endorsements'];
-
   return (
     <section id="hero" className="relative min-h-screen pt-28 pb-16 lg:pt-36 lg:pb-24 flex flex-col justify-between overflow-hidden">
 
@@ -104,20 +100,6 @@ export default function Hero() {
           </a>
         </motion.div>
 
-        {/* Trust Badges */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 1, delay: 0.8 }}
-          className="mt-12 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 font-medium"
-        >
-          {trustBadges.map((badgeText, idx) => (
-            <React.Fragment key={idx}>
-              {idx > 0 && <span className="hidden sm:inline text-slate-700">•</span>}
-              <span>✓ {badgeText}</span>
-            </React.Fragment>
-          ))}
-        </motion.div>
       </div>
 
       {/* Embedded Floating Statistics Section */}

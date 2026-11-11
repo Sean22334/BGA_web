@@ -143,7 +143,7 @@ export default function AboutUs() {
         {/* Industry Partners Bar */}
         <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.2 }} className="mt-24 text-center">
           <h4 className="text-[11px] uppercase tracking-[0.25em] font-bold text-slate-500 mb-8">
-            Trusted Placement Destinations & Partner Cruise Fleets
+            OUR TRUSTED NETWORK OF EDUCATION, INDUSTRY & HEALTHCARE PARTNERS
           </h4>
           <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
             {partners.map((partner) => (

@@ -13,7 +13,7 @@ export function parseList(value) {
 
 export function normalizeCmsContent(data = {}) {
   const normalized = { settings: { ...data.settings } };
-  for (const key of ['hero_trust_badges', 'about_why_items']) {
+  for (const key of ['about_why_items']) {
     if (key in normalized.settings) normalized.settings[key] = parseList(normalized.settings[key]);
   }
   for (const collection of CMS_COLLECTIONS) {

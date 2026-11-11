@@ -19,7 +19,6 @@ const DEFAULT_SETTINGS = {
   hero_subheadline: 'TESDA-accredited culinary, hospitality, and maritime training programs designed to prepare aspiring seafarers for high-paying contracts on luxury ocean liners.',
   hero_primary_cta_text: 'Reserve Free Orientation',
   hero_secondary_cta_text: 'Explore Programs',
-  hero_trust_badges: ['100% Free Career Orientation', 'Zero Prior Experience Required', 'POEA Manning Agency Endorsements'],
   hero_bg_image: '/images/BGA LOGOOO.png',
   about_badge: 'About Bluechef Global Academy',
   about_headline: 'Crafting World-Class Careers On',

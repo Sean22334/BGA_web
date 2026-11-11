@@ -13,13 +13,13 @@ test('CMS JSON and legacy field names normalize safely', () => {
   const content = normalizeCmsContent({
     programs: [{ short_description: 'Summary', highlights: '["Valid", 1]', is_published: '0' }],
     branches: [{ features: 'invalid json', map_url: 'https://example.com/map' }],
-    settings: { hero_trust_badges: 'invalid json' }
+    settings: { about_why_items: 'invalid json' }
   });
   assert.deepEqual(content.programs[0].highlights, ['Valid']);
   assert.equal(content.programs[0].shortDescription, 'Summary');
   assert.equal(content.programs[0].is_published, false);
   assert.deepEqual(content.branches[0].features, []);
-  assert.deepEqual(content.settings.hero_trust_badges, []);
+  assert.deepEqual(content.settings.about_why_items, []);
   assert.deepEqual(parseList('{}'), []);
 });
 
