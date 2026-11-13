@@ -16,8 +16,7 @@ import {
   Edit3,
   Phone,
   Mail,
-  FileText,
-  AlertCircle
+  FileText
 } from 'lucide-react';
 import { api } from '../services/api';
 import EditReservationModal from '../components/EditReservationModal';

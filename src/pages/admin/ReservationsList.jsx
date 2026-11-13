@@ -12,7 +12,6 @@ import {
   Phone,
   Mail,
   Eye,
-  Clock,
   MapPin,
   Filter,
   CheckCircle2,
@@ -331,8 +330,11 @@ export default function ReservationsList() {
                 </div>
 
                 <div className="space-y-1.5 mb-4">
-                  <h3 className="font-bold text-white text-sm sm:text-base group-hover:text-[#70A6FF] transition-colors leading-snug">
-                    {o.branch} Orientation
+                  <h3
+                    className="font-bold text-white text-sm sm:text-base group-hover:text-[#70A6FF] transition-colors leading-snug line-clamp-2"
+                    title={o.title || `${o.branch} Orientation`}
+                  >
+                    {o.title || `${o.branch} Orientation`}
                   </h3>
 
                   <div className="flex items-center gap-1.5 text-xs text-slate-300">
@@ -366,29 +368,32 @@ export default function ReservationsList() {
       </section>
 
       {/* Active Cluster Banner Notice */}
-      {selectedOrientation !== 'All' && (
-        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#2670f2]/10 border border-[#2670f2]/30 text-xs text-slate-200">
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-[#70A6FF] shrink-0" />
-            <span>
-              Showing reservations for{' '}
-              <strong className="text-white">
-                {orientations.find((o) => String(o.id) === String(selectedOrientation))?.branch || ''} Orientation
-                {' '}({orientations.find((o) => String(o.id) === String(selectedOrientation))?.date || ''})
-              </strong>
-              {' '}— <span className="font-bold text-[#70A6FF]">{reservations.length}</span> attendee{reservations.length === 1 ? '' : 's'} registered
-            </span>
-          </div>
+      {selectedOrientation !== 'All' && (() => {
+        const activeObj = orientations.find((o) => String(o.id) === String(selectedOrientation));
+        const activeTitle = activeObj?.title || (activeObj?.branch ? `${activeObj.branch} Orientation` : '');
+        return (
+          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#2670f2]/10 border border-[#2670f2]/30 text-xs text-slate-200">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-[#70A6FF] shrink-0" />
+              <span>
+                Showing reservations for{' '}
+                <strong className="text-white">
+                  {activeTitle}{activeObj?.date ? ` (${activeObj.date})` : ''}
+                </strong>
+                {' '}— <span className="font-bold text-[#70A6FF]">{reservations.length}</span> attendee{reservations.length === 1 ? '' : 's'} registered
+              </span>
+            </div>
 
-          <button
-            type="button"
-            onClick={() => handleSelectCluster('All')}
-            className="text-xs font-bold text-[#70A6FF] hover:text-white underline cursor-pointer"
-          >
-            Clear Filter (Show All)
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={() => handleSelectCluster('All')}
+              className="text-xs font-bold text-[#70A6FF] hover:text-white underline cursor-pointer"
+            >
+              Clear Filter (Show All)
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Filter Bar */}
       <div className="glass-panel p-4 rounded-2xl border border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -432,12 +437,12 @@ export default function ReservationsList() {
                 const matched = orientations.find((o) => String(o.id) === String(e.target.value));
                 if (matched) setSelectedBranch(matched.branch);
               }}
-              className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer max-w-[180px] truncate"
+              className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer max-w-[240px] truncate"
             >
               <option value="All">All Orientations</option>
               {orientations.map((o) => (
                 <option key={o.id} value={o.id}>
-                  [{o.branch}] {o.date} ({o.start_time})
+                  [{o.branch}] {o.title ? `${o.title} · ` : ''}{o.date} ({o.start_time})
                 </option>
               ))}
             </select>
@@ -527,11 +532,18 @@ export default function ReservationsList() {
 
                       {/* Event */}
                       <td className="py-4 px-4">
-                        <span className={`px-2 py-0.5 rounded font-bold uppercase text-[10px] mr-1.5 border ${getBranchTheme(res.orientation_branch).badge}`}>
-                          {res.orientation_branch}
-                        </span>
-                        <span className="font-bold text-white">{res.orientation_date}</span>
-                        <div className="text-[11px] text-slate-400">{res.orientation_time}</div>
+                        {res.orientation_title && (
+                          <div className="font-bold text-white text-xs mb-1 line-clamp-1 max-w-[220px]" title={res.orientation_title}>
+                            {res.orientation_title}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded font-bold uppercase text-[10px] border ${getBranchTheme(res.orientation_branch).badge}`}>
+                            {res.orientation_branch}
+                          </span>
+                          <span className="font-medium text-slate-200 text-xs">{res.orientation_date}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">{res.orientation_time}</div>
                       </td>
 
                       {/* Status */}
